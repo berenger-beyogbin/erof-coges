@@ -1,0 +1,3332 @@
+{
+  "formulaire": "EROF_COGES",
+  "version": "2.1",
+  "description": "Configuration JSON corrigée des sections et questions du formulaire EROF COGES, pilotant dynamiquement l'interface de collecte (Google AI Studio + Supabase). Corrigée : téléphones en type tel, valeurs techniques normalisées (value/label), correspondance explicite question -> table Supabase (storage_table).",
+  "regles_stockage": {
+    "principe": "Chaque question porte un champ storage_table (et storage_column le cas échéant) indiquant sa destination réelle dans schema.sql. Par défaut evaluation_reponses (modèle EAV) ; les exceptions listées ci-dessous priment.",
+    "exceptions": {
+      "section_16": "membres_be — jamais evaluation_reponses (11 lignes par évaluation, une par poste, cf. repeat_instances)",
+      "section_17": "preuves_documentaires — jamais evaluation_reponses (20 lignes fixes par évaluation)",
+      "section_19": "recommandations — jamais evaluation_reponses (1 ligne par évaluation, 6 colonnes fixes)",
+      "section_20": "equipes_evaluation — jamais evaluation_reponses (1 à 4 lignes par évaluation)",
+      "section_1_et_2": "éclatées entre etablissements, coges et evaluations (voir storage_table/storage_column par question) — pas de EAV pour ces données à forme fixe"
+    }
+  },
+  "sections": [
+    {
+      "num": 1,
+      "titre": "Identification du COGES",
+      "objectif": "Identifier sans ambiguïté l'école, le COGES et les responsables afin de permettre le croisement des données par DRENA, IEPP, localité et type d'établissement.",
+      "type_donnees": "Données d'identification (texte, listes, dates, numérique, GPS)",
+      "intro": null,
+      "repetable": false,
+      "storage_table_defaut": "evaluation_reponses",
+      "questions": [
+        {
+          "code": "1.1",
+          "section": 1,
+          "libelle": "DRENA",
+          "type": "select",
+          "required": true,
+          "controle_coherence": "Champ obligatoire",
+          "preuve_attendue": null,
+          "storage_table": "reference",
+          "storage_note": "Filtre la liste des IEPP (1.2) ; n'est pas persistée telle quelle.",
+          "optionsSource": "table:drenas(id,nom)"
+        },
+        {
+          "code": "1.2",
+          "section": 1,
+          "libelle": "IEPP",
+          "type": "select",
+          "required": true,
+          "controle_coherence": "Dépend de 1.1 (liste filtrée)",
+          "preuve_attendue": null,
+          "storage_table": "etablissements",
+          "storage_column": "iepp_id",
+          "storage_note": "Détermine l'établissement sélectionné ; pas une saisie libre.",
+          "optionsSource": "table:iepps(id,nom) filtré par drena_id = 1.1"
+        },
+        {
+          "code": "1.3",
+          "section": 1,
+          "libelle": "Localité",
+          "type": "text",
+          "required": true,
+          "controle_coherence": "Champ obligatoire",
+          "preuve_attendue": null,
+          "storage_table": "etablissements",
+          "storage_column": "localite"
+        },
+        {
+          "code": "1.4",
+          "section": 1,
+          "libelle": "École / groupe scolaire",
+          "type": "text",
+          "required": true,
+          "controle_coherence": "Champ obligatoire",
+          "preuve_attendue": null,
+          "storage_table": "etablissements",
+          "storage_column": "nom",
+          "storage_note": "Recherche/sélection dans le référentiel, pas une création libre.",
+          "optionsSource": "table:etablissements(id,nom) filtré par iepp_id = 1.2"
+        },
+        {
+          "code": "1.5",
+          "section": 1,
+          "libelle": "Code école / code DESPS",
+          "type": "text",
+          "required": true,
+          "controle_coherence": "Doit correspondre au format officiel DESPS",
+          "preuve_attendue": null,
+          "storage_table": "etablissements",
+          "storage_column": "code_desps"
+        },
+        {
+          "code": "1.6",
+          "section": 1,
+          "libelle": "Code COGES (si disponible)",
+          "type": "text",
+          "required": false,
+          "controle_coherence": null,
+          "preuve_attendue": null,
+          "storage_table": "coges",
+          "storage_column": "code_coges"
+        },
+        {
+          "code": "1.7",
+          "section": 1,
+          "libelle": "Type d'établissement",
+          "type": "select",
+          "options": [
+            {
+              "value": "prescolaire",
+              "label": "Préscolaire"
+            },
+            {
+              "value": "primaire",
+              "label": "Primaire"
+            },
+            {
+              "value": "groupe_scolaire",
+              "label": "Groupe scolaire"
+            },
+            {
+              "value": "college",
+              "label": "Collège"
+            },
+            {
+              "value": "lycee",
+              "label": "Lycée"
+            }
+          ],
+          "required": true,
+          "controle_coherence": "Champ obligatoire",
+          "preuve_attendue": null,
+          "storage_table": "etablissements",
+          "storage_column": "type_etablissement"
+        },
+        {
+          "code": "1.8",
+          "section": 1,
+          "libelle": "Date de création de l'école / de l'établissement",
+          "type": "date",
+          "required": true,
+          "controle_coherence": "Ne doit pas être postérieure à la date de collecte",
+          "preuve_attendue": null,
+          "storage_table": "etablissements",
+          "storage_column": "date_creation"
+        },
+        {
+          "code": "1.9",
+          "section": 1,
+          "libelle": "Date de création du COGES",
+          "type": "date",
+          "required": false,
+          "validation": {
+            "notFuture": true
+          },
+          "controle_coherence": "Ne doit pas être future ; doit être ≥ date de création de l'école",
+          "preuve_attendue": "PV de la première AG constitutive",
+          "storage_table": "coges",
+          "storage_column": "date_creation"
+        },
+        {
+          "code": "1.10",
+          "section": 1,
+          "libelle": "Date de la dernière AG élective",
+          "type": "date",
+          "required": true,
+          "validation": {
+            "notFuture": true
+          },
+          "controle_coherence": "Ne doit pas être future ; doit être ≥ date de création du COGES",
+          "preuve_attendue": "PV de la dernière AG élective",
+          "storage_table": "coges",
+          "storage_column": "date_derniere_ag_elective"
+        },
+        {
+          "code": "1.11",
+          "section": 1,
+          "libelle": "Effectif total des élèves",
+          "type": "number",
+          "required": true,
+          "validation": {
+            "min": 0
+          },
+          "controle_coherence": "Doit être égal à 1.12 + 1.13",
+          "preuve_attendue": null,
+          "storage_table": "evaluations",
+          "storage_column": "effectif_total"
+        },
+        {
+          "code": "1.12",
+          "section": 1,
+          "libelle": "Effectif filles",
+          "type": "number",
+          "required": true,
+          "validation": {
+            "min": 0
+          },
+          "controle_coherence": "1.12 + 1.13 = 1.11",
+          "preuve_attendue": null,
+          "storage_table": "evaluations",
+          "storage_column": "effectif_filles"
+        },
+        {
+          "code": "1.13",
+          "section": 1,
+          "libelle": "Effectif garçons",
+          "type": "number",
+          "required": true,
+          "validation": {
+            "min": 0
+          },
+          "controle_coherence": "1.12 + 1.13 = 1.11",
+          "preuve_attendue": null,
+          "storage_table": "evaluations",
+          "storage_column": "effectif_garcons"
+        },
+        {
+          "code": "1.14",
+          "section": 1,
+          "libelle": "Nom et prénoms du Président du Bureau Exécutif",
+          "type": "text",
+          "required": true,
+          "controle_coherence": "Champ obligatoire",
+          "preuve_attendue": null,
+          "storage_table": "evaluations",
+          "storage_column": "president_nom"
+        },
+        {
+          "code": "1.15",
+          "section": 1,
+          "libelle": "Contact du Président du Bureau Exécutif",
+          "type": "tel",
+          "required": true,
+          "validation": {
+            "pattern": "^[0-9]{10}$",
+            "message": "Le numéro doit comporter exactement 10 chiffres."
+          },
+          "controle_coherence": "Format ivoirien à 10 chiffres",
+          "preuve_attendue": null,
+          "storage_table": "evaluations",
+          "storage_column": "president_contact"
+        },
+        {
+          "code": "1.16",
+          "section": 1,
+          "libelle": "Nom du Conseiller chargé des COGES (Conseiller à l'extrascolaire / IEPP)",
+          "type": "text",
+          "required": true,
+          "controle_coherence": "Champ obligatoire",
+          "preuve_attendue": null,
+          "storage_table": "evaluations",
+          "storage_column": "conseiller_nom"
+        },
+        {
+          "code": "1.17",
+          "section": 1,
+          "libelle": "Contact du Conseiller",
+          "type": "tel",
+          "required": true,
+          "validation": {
+            "pattern": "^[0-9]{10}$",
+            "message": "Le numéro doit comporter exactement 10 chiffres."
+          },
+          "controle_coherence": "Format ivoirien à 10 chiffres",
+          "preuve_attendue": null,
+          "storage_table": "evaluations",
+          "storage_column": "conseiller_contact"
+        },
+        {
+          "code": "1.18",
+          "section": 1,
+          "libelle": "E-mail du Conseiller",
+          "type": "text",
+          "required": true,
+          "validation": {
+            "pattern": "^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$",
+            "message": "Adresse e-mail invalide."
+          },
+          "controle_coherence": "Format e-mail valide",
+          "preuve_attendue": null,
+          "storage_table": "evaluations",
+          "storage_column": "conseiller_email"
+        },
+        {
+          "code": "1.19",
+          "section": 1,
+          "libelle": "Nom de l'enquêteur",
+          "type": "text",
+          "required": true,
+          "controle_coherence": "Champ obligatoire",
+          "preuve_attendue": null,
+          "storage_table": "evaluations",
+          "storage_column": "enqueteur_id",
+          "storage_note": "Auto-rempli depuis la session, non modifiable par l'enquêteur."
+        },
+        {
+          "code": "1.20",
+          "section": 1,
+          "libelle": "Date de collecte",
+          "type": "date",
+          "required": true,
+          "validation": {
+            "notFuture": true
+          },
+          "controle_coherence": "Ne doit pas être future",
+          "preuve_attendue": null,
+          "storage_table": "evaluations",
+          "storage_column": "date_collecte"
+        },
+        {
+          "code": "1.21",
+          "section": 1,
+          "libelle": "Coordonnées GPS de l'établissement",
+          "type": "gps",
+          "required": false,
+          "controle_coherence": null,
+          "preuve_attendue": null,
+          "storage_table": "etablissements",
+          "storage_column": "latitude,longitude"
+        }
+      ]
+    },
+    {
+      "num": 2,
+      "titre": "Informations générales sur l'école ou le groupe scolaire",
+      "objectif": "Caractériser l'environnement scolaire (statut, milieu, taille) afin de contextualiser le niveau de fonctionnalité du COGES.",
+      "type_donnees": "Données descriptives de l'école (listes, numérique)",
+      "intro": null,
+      "repetable": false,
+      "storage_table_defaut": "evaluation_reponses",
+      "questions": [
+        {
+          "code": "2.1",
+          "section": 2,
+          "libelle": "Statut de l'établissement",
+          "type": "select",
+          "options": [
+            {
+              "value": "public",
+              "label": "Public"
+            },
+            {
+              "value": "prive_laic",
+              "label": "Privé laïc"
+            },
+            {
+              "value": "prive_confessionnel",
+              "label": "Privé confessionnel"
+            }
+          ],
+          "required": true,
+          "controle_coherence": null,
+          "preuve_attendue": null,
+          "storage_table": "etablissements",
+          "storage_column": "statut"
+        },
+        {
+          "code": "2.2",
+          "section": 2,
+          "libelle": "Milieu",
+          "type": "select",
+          "options": [
+            {
+              "value": "urbain",
+              "label": "Urbain"
+            },
+            {
+              "value": "periurbain",
+              "label": "Périurbain"
+            },
+            {
+              "value": "rural",
+              "label": "Rural"
+            }
+          ],
+          "required": true,
+          "controle_coherence": null,
+          "preuve_attendue": null,
+          "storage_table": "etablissements",
+          "storage_column": "milieu"
+        },
+        {
+          "code": "2.3",
+          "section": 2,
+          "libelle": "Nombre de classes / sections pédagogiques",
+          "type": "number",
+          "required": true,
+          "validation": {
+            "min": 0
+          },
+          "controle_coherence": null,
+          "preuve_attendue": null,
+          "storage_table": "etablissements",
+          "storage_column": "nombre_classes"
+        },
+        {
+          "code": "2.4",
+          "section": 2,
+          "libelle": "Nombre d'enseignants en poste",
+          "type": "number",
+          "required": true,
+          "validation": {
+            "min": 0
+          },
+          "controle_coherence": null,
+          "preuve_attendue": null,
+          "storage_table": "etablissements",
+          "storage_column": "nombre_enseignants"
+        },
+        {
+          "code": "2.5",
+          "section": 2,
+          "libelle": "L'école dispose-t-elle d'une cantine scolaire ?",
+          "type": "select",
+          "options": [
+            {
+              "value": "oui",
+              "label": "Oui"
+            },
+            {
+              "value": "non",
+              "label": "Non"
+            }
+          ],
+          "boolean_mapping": {
+            "oui": true,
+            "non": false
+          },
+          "required": true,
+          "controle_coherence": null,
+          "preuve_attendue": null,
+          "storage_table": "etablissements",
+          "storage_column": "cantine"
+        }
+      ]
+    },
+    {
+      "num": 3,
+      "titre": "Historique et situation administrative du COGES",
+      "objectif": "Retracer la création du COGES et vérifier son ancrage réglementaire.",
+      "type_donnees": "Texte libre + item noté avec preuve",
+      "intro": null,
+      "repetable": false,
+      "storage_table_defaut": "evaluation_reponses",
+      "questions": [
+        {
+          "code": "3.1",
+          "section": 3,
+          "libelle": "Bref historique de la création du COGES (année, acteurs impliqués, motivations)",
+          "type": "textarea",
+          "required": true,
+          "controle_coherence": null,
+          "preuve_attendue": null,
+          "storage_table": "evaluations",
+          "storage_column": "historique_creation"
+        },
+        {
+          "code": "3.2",
+          "section": 3,
+          "libelle": "Le COGES dispose de textes réglementaires (décrets, arrêtés)",
+          "type": "rating_1_5",
+          "options": [
+            {
+              "value": 1,
+              "label": "Aucun texte réglementaire disponible ni connu"
+            },
+            {
+              "value": 2,
+              "label": "Existence connue mais aucun texte disponible sur place"
+            },
+            {
+              "value": 3,
+              "label": "Textes disponibles mais incomplets ou non consultables immédiatement"
+            },
+            {
+              "value": 4,
+              "label": "Textes disponibles, complets et consultables"
+            },
+            {
+              "value": 5,
+              "label": "Textes disponibles, complets, consultables et connus du Bureau Exécutif"
+            }
+          ],
+          "required": true,
+          "validation": {
+            "min": 1,
+            "max": 5
+          },
+          "controle_coherence": null,
+          "preuve_attendue": "Textes réglementaires (décrets, arrêtés)",
+          "storage_table": "evaluation_reponses"
+        }
+      ]
+    },
+    {
+      "num": 4,
+      "titre": "Vision, mission et connaissance du rôle du COGES",
+      "objectif": "Mesurer le niveau d'appropriation de la vision et de la mission du COGES par les membres du Bureau Exécutif.",
+      "type_donnees": "Items notés 1 à 5",
+      "intro": null,
+      "repetable": false,
+      "storage_table_defaut": "evaluation_reponses",
+      "questions": [
+        {
+          "code": "4.1",
+          "section": 4,
+          "libelle": "Niveau général de fonctionnement du COGES tel que perçu par l'équipe d'évaluation",
+          "type": "rating_1_5",
+          "options": [
+            {
+              "value": 1,
+              "label": "Ne fonctionne pas"
+            },
+            {
+              "value": 2,
+              "label": "Fonctionne difficilement"
+            },
+            {
+              "value": 3,
+              "label": "Fonctionne assez bien"
+            },
+            {
+              "value": 4,
+              "label": "Fonctionne bien"
+            },
+            {
+              "value": 5,
+              "label": "Fonctionne très bien"
+            }
+          ],
+          "required": true,
+          "validation": {
+            "min": 1,
+            "max": 5
+          },
+          "controle_coherence": null,
+          "preuve_attendue": null,
+          "storage_table": "evaluation_reponses"
+        },
+        {
+          "code": "4.2",
+          "section": 4,
+          "libelle": "Connaissance de la vision du COGES par les membres du Bureau Exécutif",
+          "type": "rating_1_5",
+          "options": [
+            {
+              "value": 1,
+              "label": "Aucun membre du Bureau Exécutif ne connaît la vision du COGES"
+            },
+            {
+              "value": 2,
+              "label": "Moins d'un cinquième des membres du Bureau Exécutif peut l'expliquer"
+            },
+            {
+              "value": 3,
+              "label": "Environ la moitié des membres du Bureau Exécutif peut l'expliquer"
+            },
+            {
+              "value": 4,
+              "label": "Plus de la moitié des membres du Bureau Exécutif peut l'expliquer"
+            },
+            {
+              "value": 5,
+              "label": "Tous les membres du Bureau Exécutif peuvent l'expliquer"
+            }
+          ],
+          "required": true,
+          "validation": {
+            "min": 1,
+            "max": 5
+          },
+          "controle_coherence": null,
+          "preuve_attendue": null,
+          "storage_table": "evaluation_reponses"
+        },
+        {
+          "code": "4.3",
+          "section": 4,
+          "libelle": "Connaissance de la mission du COGES par les membres du Bureau Exécutif",
+          "type": "rating_1_5",
+          "options": [
+            {
+              "value": 1,
+              "label": "Aucun membre du Bureau Exécutif ne connaît la mission du COGES"
+            },
+            {
+              "value": 2,
+              "label": "Moins d'un cinquième des membres du Bureau Exécutif peut l'expliquer"
+            },
+            {
+              "value": 3,
+              "label": "Environ la moitié des membres du Bureau Exécutif peut l'expliquer"
+            },
+            {
+              "value": 4,
+              "label": "Plus de la moitié des membres du Bureau Exécutif peut l'expliquer"
+            },
+            {
+              "value": 5,
+              "label": "Tous les membres du Bureau Exécutif peuvent l'expliquer"
+            }
+          ],
+          "required": true,
+          "validation": {
+            "min": 1,
+            "max": 5
+          },
+          "controle_coherence": null,
+          "preuve_attendue": null,
+          "storage_table": "evaluation_reponses"
+        }
+      ]
+    },
+    {
+      "num": 5,
+      "titre": "Structure institutionnelle du COGES",
+      "objectif": "Évaluer la mise en place effective des organes statutaires et le respect des règles de composition et de mandat du Bureau Exécutif.",
+      "type_donnees": "Items notés 1 à 5, numériques et preuve",
+      "intro": null,
+      "repetable": false,
+      "storage_table_defaut": "evaluation_reponses",
+      "questions": [
+        {
+          "code": "5.1",
+          "section": 5,
+          "libelle": "Le COGES dispose d'un règlement intérieur",
+          "type": "rating_1_5",
+          "options": [
+            {
+              "value": 1,
+              "label": "N'existe pas"
+            },
+            {
+              "value": 2,
+              "label": "En cours d'élaboration"
+            },
+            {
+              "value": 3,
+              "label": "Existe mais est mal connu des membres"
+            },
+            {
+              "value": 4,
+              "label": "Existe et est connu du Bureau Exécutif uniquement"
+            },
+            {
+              "value": 5,
+              "label": "Existe et est connu et maîtrisé par tous les acteurs (BE, AG, Commissariat aux Comptes, parents membres)"
+            }
+          ],
+          "required": true,
+          "validation": {
+            "min": 1,
+            "max": 5
+          },
+          "controle_coherence": null,
+          "preuve_attendue": "Règlement intérieur",
+          "storage_table": "evaluation_reponses"
+        },
+        {
+          "code": "5.2",
+          "section": 5,
+          "libelle": "Les organes statutaires prévus (AG, Bureau Exécutif, Commissariat aux Comptes, Assemblées Subsidiaires) existent et fonctionnent",
+          "type": "rating_1_5",
+          "options": [
+            {
+              "value": 1,
+              "label": "Aucun organe n'existe"
+            },
+            {
+              "value": 2,
+              "label": "Seul le Bureau Exécutif existe"
+            },
+            {
+              "value": 3,
+              "label": "L'AG, le Commissariat aux Comptes et les Assemblées Subsidiaires existent en plus du Bureau Exécutif"
+            },
+            {
+              "value": 4,
+              "label": "Tous les organes existent"
+            },
+            {
+              "value": 5,
+              "label": "Tous les organes existent et sont fonctionnels"
+            }
+          ],
+          "required": true,
+          "validation": {
+            "min": 1,
+            "max": 5
+          },
+          "controle_coherence": null,
+          "preuve_attendue": null,
+          "storage_table": "evaluation_reponses"
+        },
+        {
+          "code": "5.3",
+          "section": 5,
+          "libelle": "Nombre de femmes membres du Bureau Exécutif",
+          "type": "number",
+          "required": true,
+          "validation": {
+            "min": 0
+          },
+          "controle_coherence": "Ne peut excéder l'effectif total du BE",
+          "preuve_attendue": null,
+          "storage_table": "evaluation_reponses"
+        },
+        {
+          "code": "5.4",
+          "section": 5,
+          "libelle": "Maîtrise du rôle par les femmes membres du Bureau Exécutif",
+          "type": "rating_1_5",
+          "options": [
+            {
+              "value": 1,
+              "label": "Aucune femme au Bureau Exécutif"
+            },
+            {
+              "value": 2,
+              "label": "Femmes présentes mais aucune ne maîtrise son rôle"
+            },
+            {
+              "value": 3,
+              "label": "Femmes présentes, une minorité maîtrise son rôle"
+            },
+            {
+              "value": 4,
+              "label": "Femmes présentes, la majorité maîtrise son rôle"
+            },
+            {
+              "value": 5,
+              "label": "Femmes présentes en nombre significatif (plus de deux) et toutes maîtrisent leur rôle"
+            }
+          ],
+          "required": true,
+          "validation": {
+            "min": 1,
+            "max": 5
+          },
+          "controle_coherence": "Cohérent avec 5.3 (si 5.3 = 0 alors 5.4 = 1)",
+          "preuve_attendue": null,
+          "storage_table": "evaluation_reponses"
+        },
+        {
+          "code": "5.5",
+          "section": 5,
+          "libelle": "Nombre d'élèves membres du Bureau Exécutif",
+          "type": "number",
+          "required": true,
+          "validation": {
+            "min": 0
+          },
+          "controle_coherence": null,
+          "preuve_attendue": null,
+          "storage_table": "evaluation_reponses"
+        },
+        {
+          "code": "5.6",
+          "section": 5,
+          "libelle": "Maîtrise du rôle par les élèves membres du Bureau Exécutif",
+          "type": "rating_1_5",
+          "options": [
+            {
+              "value": 1,
+              "label": "Aucun élève au Bureau Exécutif"
+            },
+            {
+              "value": 2,
+              "label": "Élève(s) présent(s) mais aucun ne maîtrise son rôle"
+            },
+            {
+              "value": 3,
+              "label": "Un élève maîtrise correctement son rôle"
+            },
+            {
+              "value": 4,
+              "label": "Deux élèves présents, aucun ne maîtrise pleinement son rôle"
+            },
+            {
+              "value": 5,
+              "label": "Deux élèves présents et maîtrisent tous les deux leur rôle"
+            }
+          ],
+          "required": true,
+          "validation": {
+            "min": 1,
+            "max": 5
+          },
+          "controle_coherence": "Cohérent avec 5.5",
+          "preuve_attendue": null,
+          "storage_table": "evaluation_reponses"
+        },
+        {
+          "code": "5.7",
+          "section": 5,
+          "libelle": "Le Bureau Exécutif a été élu démocratiquement",
+          "type": "rating_1_5",
+          "options": [
+            {
+              "value": 1,
+              "label": "Les membres ont été désignés"
+            },
+            {
+              "value": 2,
+              "label": "Les membres ont été reconduits automatiquement ou par pression"
+            },
+            {
+              "value": 3,
+              "label": "Les membres ont été élus à main levée sans quorum atteint"
+            },
+            {
+              "value": 4,
+              "label": "Les membres ont été élus à main levée avec quorum atteint"
+            },
+            {
+              "value": 5,
+              "label": "Les membres ont été élus au scrutin secret"
+            }
+          ],
+          "required": true,
+          "validation": {
+            "min": 1,
+            "max": 5
+          },
+          "controle_coherence": null,
+          "preuve_attendue": "PV de la dernière AG élective",
+          "storage_table": "evaluation_reponses"
+        },
+        {
+          "code": "5.8",
+          "section": 5,
+          "libelle": "Le nombre et la durée des mandats des membres du Bureau Exécutif sont limités et respectés",
+          "type": "rating_1_5",
+          "options": [
+            {
+              "value": 1,
+              "label": "Ni le nombre de membres ni la durée du mandat ne sont respectés"
+            },
+            {
+              "value": 2,
+              "label": "Le nombre de membres is limité mais non respecté"
+            },
+            {
+              "value": 3,
+              "label": "La durée du mandat is limitée mais non respectée"
+            },
+            {
+              "value": 4,
+              "label": "L'un des deux critères (nombre ou durée) est limité et respecté"
+            },
+            {
+              "value": 5,
+              "label": "Le nombre de membres et la durée du mandat sont tous deux limités et respectés"
+            }
+          ],
+          "required": true,
+          "validation": {
+            "min": 1,
+            "max": 5
+          },
+          "controle_coherence": null,
+          "preuve_attendue": "Règlement intérieur / statuts",
+          "storage_table": "evaluation_reponses"
+        },
+        {
+          "code": "5.9",
+          "section": 5,
+          "libelle": "Une liste des membres du Bureau Exécutif existe",
+          "type": "rating_1_5",
+          "options": [
+            {
+              "value": 1,
+              "label": "Aucune liste"
+            },
+            {
+              "value": 2,
+              "label": "Liste existante mais non actualisée"
+            },
+            {
+              "value": 3,
+              "label": "Liste actualisée sans précision des postes"
+            },
+            {
+              "value": 4,
+              "label": "Liste actualisée avec précision des postes"
+            },
+            {
+              "value": 5,
+              "label": "Liste actualisée, conforme et affichée"
+            }
+          ],
+          "required": true,
+          "validation": {
+            "min": 1,
+            "max": 5
+          },
+          "controle_coherence": null,
+          "preuve_attendue": "Liste actualisée des membres du Bureau Exécutif",
+          "storage_table": "evaluation_reponses"
+        }
+      ]
+    },
+    {
+      "num": 6,
+      "titre": "Fonctionnement des organes",
+      "objectif": "Apprécier la régularité et la traçabilité du fonctionnement courant des organes du COGES.",
+      "type_donnees": "Items notés 1 à 5",
+      "intro": null,
+      "repetable": false,
+      "storage_table_defaut": "evaluation_reponses",
+      "questions": [
+        {
+          "code": "6.1",
+          "section": 6,
+          "libelle": "Chaque membre du Bureau Exécutif connaît son rôle et ses attributions",
+          "type": "rating_1_5",
+          "options": [
+            {
+              "value": 1,
+              "label": "Aucun membre ne connaît son rôle et ses attributions"
+            },
+            {
+              "value": 2,
+              "label": "Moins d'un tiers des membres les connaissent"
+            },
+            {
+              "value": 3,
+              "label": "Environ la moitié des membres les connaissent"
+            },
+            {
+              "value": 4,
+              "label": "Plus de la moitié des membres les connaissent"
+            },
+            {
+              "value": 5,
+              "label": "Tous les membres connaissent leur rôle et leurs attributions"
+            }
+          ],
+          "required": true,
+          "validation": {
+            "min": 1,
+            "max": 5
+          },
+          "controle_coherence": null,
+          "preuve_attendue": null,
+          "storage_table": "evaluation_reponses"
+        },
+        {
+          "code": "6.2",
+          "section": 6,
+          "libelle": "Les organes prévus (AG, Bureau Exécutif, Commissariat aux Comptes, Assemblées Subsidiaires) sont opérationnels",
+          "type": "rating_1_5",
+          "options": [
+            {
+              "value": 1,
+              "label": "Aucun organe n'est opérationnel"
+            },
+            {
+              "value": 2,
+              "label": "Seul le Bureau Exécutif est opérationnel (PV et liste des participants disponibles)"
+            },
+            {
+              "value": 3,
+              "label": "Le Bureau Exécutif et l'AG sont opérationnels"
+            },
+            {
+              "value": 4,
+              "label": "Le Bureau Exécutif, l'AG et le Commissariat aux Comptes sont opérationnels"
+            },
+            {
+              "value": 5,
+              "label": "Tous les organes, y compris les Assemblées Subsidiaires, sont opérationnels"
+            }
+          ],
+          "required": true,
+          "validation": {
+            "min": 1,
+            "max": 5
+          },
+          "controle_coherence": null,
+          "preuve_attendue": null,
+          "storage_table": "evaluation_reponses"
+        },
+        {
+          "code": "6.3",
+          "section": 6,
+          "libelle": "Le Bureau Exécutif se réunit régulièrement",
+          "type": "rating_1_5",
+          "options": [
+            {
+              "value": 1,
+              "label": "Ne se réunit jamais"
+            },
+            {
+              "value": 2,
+              "label": "Se réunit de façon occasionnelle, à l'initiative du Directeur d'école"
+            },
+            {
+              "value": 3,
+              "label": "Se réunit une fois par semestre"
+            },
+            {
+              "value": 4,
+              "label": "Se réunit deux fois par trimestre"
+            },
+            {
+              "value": 5,
+              "label": "Se réunit au moins une fois par mois"
+            }
+          ],
+          "required": true,
+          "validation": {
+            "min": 1,
+            "max": 5
+          },
+          "controle_coherence": null,
+          "preuve_attendue": null,
+          "storage_table": "evaluation_reponses"
+        },
+        {
+          "code": "6.4",
+          "section": 6,
+          "libelle": "Un PV assorti d'une liste de présence des réunions est tenu à jour par le Secrétaire Général et accessible aux autres membres",
+          "type": "rating_1_5",
+          "options": [
+            {
+              "value": 1,
+              "label": "Aucun PV"
+            },
+            {
+              "value": 2,
+              "label": "PV tenus sur feuilles volantes"
+            },
+            {
+              "value": 3,
+              "label": "PV tenus mais non actualisés"
+            },
+            {
+              "value": 4,
+              "label": "PV à jour avec liste des participants, mais non accessibles aux autres membres"
+            },
+            {
+              "value": 5,
+              "label": "PV à jour, tenus dans un registre par le Secrétaire Général et accessibles à tous"
+            }
+          ],
+          "required": true,
+          "validation": {
+            "min": 1,
+            "max": 5
+          },
+          "controle_coherence": null,
+          "preuve_attendue": "PV des réunions du Bureau Exécutif ; liste de présence",
+          "storage_table": "evaluation_reponses"
+        },
+        {
+          "code": "6.5",
+          "section": 6,
+          "libelle": "Un système de circulation de l'information existe au sein du COGES",
+          "type": "rating_1_5",
+          "options": [
+            {
+              "value": 1,
+              "label": "Aucun système n'existe"
+            },
+            {
+              "value": 2,
+              "label": "Système restreint à quelques membres"
+            },
+            {
+              "value": 3,
+              "label": "Système traditionnel (crieur public, lieux de culte, bouche-à-oreille)"
+            },
+            {
+              "value": 4,
+              "label": "Moyens modernes utilisés (courrier, radio, téléphone)"
+            },
+            {
+              "value": 5,
+              "label": "Système permanent et adapté au contexte de la communauté"
+            }
+          ],
+          "required": true,
+          "validation": {
+            "min": 1,
+            "max": 5
+          },
+          "controle_coherence": null,
+          "preuve_attendue": null,
+          "storage_table": "evaluation_reponses"
+        },
+        {
+          "code": "6.6",
+          "section": 6,
+          "libelle": "Le COGES tient ses Assemblées Générales",
+          "type": "rating_1_5",
+          "options": [
+            {
+              "value": 1,
+              "label": "Ne tient aucune réunion"
+            },
+            {
+              "value": 2,
+              "label": "Ne les tient jamais à l'école"
+            },
+            {
+              "value": 3,
+              "label": "Les tient parfois à l'école"
+            },
+            {
+              "value": 4,
+              "label": "Les tient toujours à l'école, hors salle de réunion dédiée"
+            },
+            {
+              "value": 5,
+              "label": "Dispose d'une salle de réunion et de travail dédiée à l'école"
+            }
+          ],
+          "required": true,
+          "validation": {
+            "min": 1,
+            "max": 5
+          },
+          "controle_coherence": null,
+          "preuve_attendue": null,
+          "storage_table": "evaluation_reponses"
+        }
+      ]
+    },
+    {
+      "num": 7,
+      "titre": "Gestion administrative et documentaire",
+      "objectif": "Vérifier l'existence, le classement et l'accessibilité des documents administratifs du COGES.",
+      "type_donnees": "Item noté 1 à 5 avec preuve",
+      "intro": null,
+      "repetable": false,
+      "storage_table_defaut": "evaluation_reponses",
+      "questions": [
+        {
+          "code": "7.1",
+          "section": 7,
+          "libelle": "Les documents du COGES existent et sont bien classés (courriers, RIB, textes réglementaires, PV de réunions, cahier de visite, etc.)",
+          "type": "rating_1_5",
+          "options": [
+            {
+              "value": 1,
+              "label": "Aucun document n'existe"
+            },
+            {
+              "value": 2,
+              "label": "Les documents existent mais ne sont pas classés"
+            },
+            {
+              "value": 3,
+              "label": "Les documents sont détenus par d'anciens membres du Bureau Exécutif"
+            },
+            {
+              "value": 4,
+              "label": "Les documents sont gardés par le Bureau Exécutif en fonction"
+            },
+            {
+              "value": 5,
+              "label": "Les documents sont bien classés et conservés au bureau du Directeur d'école"
+            }
+          ],
+          "required": true,
+          "validation": {
+            "min": 1,
+            "max": 5
+          },
+          "controle_coherence": null,
+          "preuve_attendue": "Cahier de visite ; classeur de courriers",
+          "storage_table": "evaluation_reponses"
+        }
+      ]
+    },
+    {
+      "num": 8,
+      "titre": "Gestion financière",
+      "objectif": "Évaluer la rigueur de la gestion financière : comptes, caisses, registres, pièces justificatives et procédures.",
+      "type_donnees": "Items notés 1 à 5 avec preuve",
+      "intro": null,
+      "repetable": false,
+      "storage_table_defaut": "evaluation_reponses",
+      "questions": [
+        {
+          "code": "8.1",
+          "section": 8,
+          "libelle": "Le COGES dispose d'un compte bancaire avec des signataires clairement identifiés",
+          "type": "rating_1_5",
+          "options": [
+            {
+              "value": 1,
+              "label": "Aucun compte bancaire"
+            },
+            {
+              "value": 2,
+              "label": "Compte existant mais non opérationnel"
+            },
+            {
+              "value": 3,
+              "label": "Compte opérationnel avec un seul signataire"
+            },
+            {
+              "value": 4,
+              "label": "Compte opérationnel avec deux signataires"
+            },
+            {
+              "value": 5,
+              "label": "Compte opérationnel avec deux signataires et supervisé régulièrement par le Commissariat aux Comptes"
+            }
+          ],
+          "required": true,
+          "validation": {
+            "min": 1,
+            "max": 5
+          },
+          "controle_coherence": null,
+          "preuve_attendue": "RIB ou document bancaire",
+          "storage_table": "evaluation_reponses"
+        },
+        {
+          "code": "8.2",
+          "section": 8,
+          "libelle": "Le COGES dispose d'une caisse de dépenses et d'un journal de caisse",
+          "type": "rating_1_5",
+          "options": [
+            {
+              "value": 1,
+              "label": "Ni caisse ni journal de caisse"
+            },
+            {
+              "value": 2,
+              "label": "Caisse non opérationnelle"
+            },
+            {
+              "value": 3,
+              "label": "Caisse opérationnelle non sécurisée, journal non accessible au Commissariat aux Comptes"
+            },
+            {
+              "value": 4,
+              "label": "Caisse opérationnelle et sécurisée, journal tenu par un membre autre que le Trésorier Général"
+            },
+            {
+              "value": 5,
+              "label": "Caisse opérationnelle et sécurisée, journal à jour et tenu par le Trésorier Général"
+            }
+          ],
+          "required": true,
+          "validation": {
+            "min": 1,
+            "max": 5
+          },
+          "controle_coherence": null,
+          "preuve_attendue": "Journal de caisse",
+          "storage_table": "evaluation_reponses"
+        },
+        {
+          "code": "8.3",
+          "section": 8,
+          "libelle": "Le COGES dispose d'un journal de banque",
+          "type": "rating_1_5",
+          "options": [
+            {
+              "value": 1,
+              "label": "N'existe pas"
+            },
+            {
+              "value": 2,
+              "label": "Existe mais n'est pas à jour"
+            },
+            {
+              "value": 3,
+              "label": "Existe mais n'est pas accessible aux autres membres"
+            },
+            {
+              "value": 4,
+              "label": "Existe, à jour, tenu par un membre autre que le Trésorier Général"
+            },
+            {
+              "value": 5,
+              "label": "Existe, à jour et tenu par le Trésorier Général"
+            }
+          ],
+          "required": true,
+          "validation": {
+            "min": 1,
+            "max": 5
+          },
+          "controle_coherence": null,
+          "preuve_attendue": "Journal de banque",
+          "storage_table": "evaluation_reponses"
+        },
+        {
+          "code": "8.4",
+          "section": 8,
+          "libelle": "Le COGES dispose d'un registre des biens",
+          "type": "rating_1_5",
+          "options": [
+            {
+              "value": 1,
+              "label": "N'existe pas"
+            },
+            {
+              "value": 2,
+              "label": "Existe mais mal tenu"
+            },
+            {
+              "value": 3,
+              "label": "Existe, bien tenu mais non actualisé"
+            },
+            {
+              "value": 4,
+              "label": "À jour mais non accessible à tous les membres du Bureau Exécutif"
+            },
+            {
+              "value": 5,
+              "label": "À jour, bien tenu et accessible à tous les membres du Bureau Exécutif"
+            }
+          ],
+          "required": true,
+          "validation": {
+            "min": 1,
+            "max": 5
+          },
+          "controle_coherence": null,
+          "preuve_attendue": "Registre des biens",
+          "storage_table": "evaluation_reponses"
+        },
+        {
+          "code": "8.5",
+          "section": 8,
+          "libelle": "Le COGES dispose d'un carnet d'activités et de retrait avec des signataires clairement identifiés",
+          "type": "rating_1_5",
+          "options": [
+            {
+              "value": 1,
+              "label": "N'existe pas"
+            },
+            {
+              "value": 2,
+              "label": "Existe mais n'est pas utilisé"
+            },
+            {
+              "value": 3,
+              "label": "Existe avec un seul signataire"
+            },
+            {
+              "value": 4,
+              "label": "Existe avec deux signataires"
+            },
+            {
+              "value": 5,
+              "label": "Existe avec trois signataires"
+            }
+          ],
+          "required": true,
+          "validation": {
+            "min": 1,
+            "max": 5
+          },
+          "controle_coherence": null,
+          "preuve_attendue": "Carnet d'activités et de retrait",
+          "storage_table": "evaluation_reponses"
+        },
+        {
+          "code": "8.6",
+          "section": 8,
+          "libelle": "Les procédures financières sont écrites et accessibles, et les pièces comptables sont disponibles",
+          "type": "rating_1_5",
+          "options": [
+            {
+              "value": 1,
+              "label": "Aucune procédure ni pièce justificative"
+            },
+            {
+              "value": 2,
+              "label": "Procédures écrites mais non vulgarisées"
+            },
+            {
+              "value": 3,
+              "label": "Procédures écrites, vulgarisées mais non appliquées"
+            },
+            {
+              "value": 4,
+              "label": "Procédures écrites, vulgarisées et appliquées"
+            },
+            {
+              "value": 5,
+              "label": "Procédures respectées et pièces comptables justificatives conformes"
+            }
+          ],
+          "required": true,
+          "validation": {
+            "min": 1,
+            "max": 5
+          },
+          "controle_coherence": null,
+          "preuve_attendue": "Pièces comptables justificatives",
+          "storage_table": "evaluation_reponses"
+        }
+      ]
+    },
+    {
+      "num": 9,
+      "titre": "Planification, budget et redevabilité",
+      "objectif": "Vérifier l'existence d'une planification communautaire, l'élaboration participative du budget et la reddition de comptes en Assemblée Générale.",
+      "type_donnees": "Items notés 1 à 5 avec preuve",
+      "intro": null,
+      "repetable": false,
+      "storage_table_defaut": "evaluation_reponses",
+      "questions": [
+        {
+          "code": "9.1",
+          "section": 9,
+          "libelle": "Le COGES dispose d'un Plan d'Action Communautaire (PACC)",
+          "type": "rating_1_5",
+          "options": [
+            {
+              "value": 1,
+              "label": "Pas de PACC"
+            },
+            {
+              "value": 2,
+              "label": "PACC existant mais non soumis à l'AG"
+            },
+            {
+              "value": 3,
+              "label": "PACC soumis mais non approuvé par l'AG"
+            },
+            {
+              "value": 4,
+              "label": "PACC approuvé par l'AG mais non suivi"
+            },
+            {
+              "value": 5,
+              "label": "PACC approuvé par l'AG, suivi, appliqué et évalué"
+            }
+          ],
+          "required": true,
+          "validation": {
+            "min": 1,
+            "max": 5
+          },
+          "controle_coherence": null,
+          "preuve_attendue": "PACC",
+          "storage_table": "evaluation_reponses"
+        },
+        {
+          "code": "9.2",
+          "section": 9,
+          "libelle": "Le budget est élaboré et exécuté de façon participative",
+          "type": "rating_1_5",
+          "options": [
+            {
+              "value": 1,
+              "label": "Le Bureau Exécutif seul élabore le budget"
+            },
+            {
+              "value": 2,
+              "label": "Le Bureau Exécutif élabore le budget avec le Directeur d'école"
+            },
+            {
+              "value": 3,
+              "label": "Quelques membres des organes du COGES participent à l'élaboration"
+            },
+            {
+              "value": 4,
+              "label": "Tous les organes du COGES participent à l'élaboration"
+            },
+            {
+              "value": 5,
+              "label": "Le budget est élaboré collectivement et exécuté sous supervision du Commissariat aux Comptes"
+            }
+          ],
+          "required": true,
+          "validation": {
+            "min": 1,
+            "max": 5
+          },
+          "controle_coherence": null,
+          "preuve_attendue": "Budget annuel",
+          "storage_table": "evaluation_reponses"
+        },
+        {
+          "code": "9.3",
+          "section": 9,
+          "libelle": "Le budget est présenté et approuvé par l'AG en début d'année",
+          "type": "rating_1_5",
+          "options": [
+            {
+              "value": 1,
+              "label": "Jamais présenté en AG"
+            },
+            {
+              "value": 2,
+              "label": "Seuls quelques membres sont informés"
+            },
+            {
+              "value": 3,
+              "label": "Présenté en AG par le Directeur d'école"
+            },
+            {
+              "value": 4,
+              "label": "Présenté en AG par le Président du Bureau Exécutif"
+            },
+            {
+              "value": 5,
+              "label": "Présenté régulièrement par le Bureau Exécutif et approuvé en AG"
+            }
+          ],
+          "required": true,
+          "validation": {
+            "min": 1,
+            "max": 5
+          },
+          "controle_coherence": null,
+          "preuve_attendue": "PV d'approbation du budget",
+          "storage_table": "evaluation_reponses"
+        },
+        {
+          "code": "9.4",
+          "section": 9,
+          "libelle": "Le COGES produit des rapports d'activités périodiques (trimestriels et annuel)",
+          "type": "rating_1_5",
+          "options": [
+            {
+              "value": 1,
+              "label": "Aucun rapport écrit"
+            },
+            {
+              "value": 2,
+              "label": "Comptes rendus verbaux uniquement, en AG"
+            },
+            {
+              "value": 3,
+              "label": "Rapports écrits mais non soumis à l'AG"
+            },
+            {
+              "value": 4,
+              "label": "Rapports soumis mais non approuvés par l'AG"
+            },
+            {
+              "value": 5,
+              "label": "Rapports présentés et approuvés en AG"
+            }
+          ],
+          "required": true,
+          "validation": {
+            "min": 1,
+            "max": 5
+          },
+          "controle_coherence": null,
+          "preuve_attendue": "Rapport d'activités",
+          "storage_table": "evaluation_reponses"
+        },
+        {
+          "code": "9.5",
+          "section": 9,
+          "libelle": "Les rapports financiers de l'année scolaire écoulée sont rédigés et disponibles",
+          "type": "rating_1_5",
+          "options": [
+            {
+              "value": 1,
+              "label": "Aucun rapport financier"
+            },
+            {
+              "value": 2,
+              "label": "Rapports rédigés par le Directeur d'école"
+            },
+            {
+              "value": 3,
+              "label": "Rapports rédigés par le Secrétaire Général mais non à jour"
+            },
+            {
+              "value": 4,
+              "label": "Rapports rédigés par le Secrétaire Général, à jour mais non disponibles pour consultation"
+            },
+            {
+              "value": 5,
+              "label": "Rapports à jour (recettes, dépenses, solde, pièces justificatives) et disponibles"
+            }
+          ],
+          "required": true,
+          "validation": {
+            "min": 1,
+            "max": 5
+          },
+          "controle_coherence": null,
+          "preuve_attendue": "Rapport financier",
+          "storage_table": "evaluation_reponses"
+        },
+        {
+          "code": "9.6",
+          "section": 9,
+          "libelle": "Le bilan financier est présenté et approuvé par l'AG en début d'année",
+          "type": "rating_1_5",
+          "options": [
+            {
+              "value": 1,
+              "label": "Non présenté"
+            },
+            {
+              "value": 2,
+              "label": "Bilan oral, sans justificatif"
+            },
+            {
+              "value": 3,
+              "label": "Présenté en AG par le Directeur d'école"
+            },
+            {
+              "value": 4,
+              "label": "Présenté en AG par le Président du Bureau Exécutif"
+            },
+            {
+              "value": 5,
+              "label": "Présenté régulièrement par le Président du Bureau Exécutif et approuvé en AG"
+            }
+          ],
+          "required": true,
+          "validation": {
+            "min": 1,
+            "max": 5
+          },
+          "controle_coherence": null,
+          "preuve_attendue": "Bilan financier",
+          "storage_table": "evaluation_reponses"
+        },
+        {
+          "code": "9.7",
+          "section": 9,
+          "libelle": "Le COGES mène des Activités Génératrices de Revenus (AGR)",
+          "type": "rating_1_5",
+          "options": [
+            {
+              "value": 1,
+              "label": "Aucune AGR"
+            },
+            {
+              "value": 2,
+              "label": "Projets d'AGR envisagés mais non mis en œuvre"
+            },
+            {
+              "value": 3,
+              "label": "AGR menées mais mal gérées (ressources humaines, matérielles, financières)"
+            },
+            {
+              "value": 4,
+              "label": "AGR menées et bien gérées"
+            },
+            {
+              "value": 5,
+              "label": "AGR bien gérées et les bénéfices servent à améliorer la qualité de l'école"
+            }
+          ],
+          "required": true,
+          "validation": {
+            "min": 1,
+            "max": 5
+          },
+          "controle_coherence": null,
+          "preuve_attendue": "Documents relatifs aux AGR",
+          "storage_table": "evaluation_reponses"
+        }
+      ]
+    },
+    {
+      "num": 10,
+      "titre": "Co-gestion et partenariats",
+      "objectif": "Apprécier la qualité des relations du COGES avec l'école, les autres COGES et les partenaires techniques et financiers.",
+      "type_donnees": "Items notés 1 à 5",
+      "intro": null,
+      "repetable": false,
+      "storage_table_defaut": "evaluation_reponses",
+      "questions": [
+        {
+          "code": "10.1",
+          "section": 10,
+          "libelle": "Le Bureau Exécutif entretient de bonnes relations avec le personnel enseignant",
+          "type": "rating_1_5",
+          "options": [
+            {
+              "value": 1,
+              "label": "Relations conflictuelles"
+            },
+            {
+              "value": 2,
+              "label": "Relations limitées au Directeur d'école"
+            },
+            {
+              "value": 3,
+              "label": "Relations avec le Directeur d'école et les autres enseignants"
+            },
+            {
+              "value": 4,
+              "label": "Bonnes relations humaines mais rôles non délimités"
+            },
+            {
+              "value": 5,
+              "label": "Bonnes relations, attributions claires et recherche permanente de consensus"
+            }
+          ],
+          "required": true,
+          "validation": {
+            "min": 1,
+            "max": 5
+          },
+          "controle_coherence": null,
+          "preuve_attendue": null,
+          "storage_table": "evaluation_reponses"
+        },
+        {
+          "code": "10.2",
+          "section": 10,
+          "libelle": "Le Directeur d'école participe aux AG du COGES",
+          "type": "rating_1_5",
+          "options": [
+            {
+              "value": 1,
+              "label": "Jamais"
+            },
+            {
+              "value": 2,
+              "label": "Rarement"
+            },
+            {
+              "value": 3,
+              "label": "Une fois sur deux"
+            },
+            {
+              "value": 4,
+              "label": "Trois fois sur quatre"
+            },
+            {
+              "value": 5,
+              "label": "Régulièrement, y compris aux AG extraordinaires"
+            }
+          ],
+          "required": true,
+          "validation": {
+            "min": 1,
+            "max": 5
+          },
+          "controle_coherence": null,
+          "preuve_attendue": null,
+          "storage_table": "evaluation_reponses"
+        },
+        {
+          "code": "10.3",
+          "section": 10,
+          "libelle": "Le COGES sollicite des appuis auprès de ses partenaires",
+          "type": "rating_1_5",
+          "options": [
+            {
+              "value": 1,
+              "label": "Le COGES n'a aucun partenaire"
+            },
+            {
+              "value": 2,
+              "label": "Aucune sollicitation effectuée"
+            },
+            {
+              "value": 3,
+              "label": "Le COGES n'a pas identifié ses partenaires potentiels"
+            },
+            {
+              "value": 4,
+              "label": "1 à 3 demandes d'appui adressées aux partenaires"
+            },
+            {
+              "value": 5,
+              "label": "Le COGES a sollicité et obtenu des appuis auprès de ses partenaires"
+            }
+          ],
+          "required": true,
+          "validation": {
+            "min": 1,
+            "max": 5
+          },
+          "controle_coherence": null,
+          "preuve_attendue": "Preuves d'appuis reçus des partenaires",
+          "storage_table": "evaluation_reponses"
+        },
+        {
+          "code": "10.4",
+          "section": 10,
+          "libelle": "Le COGES collabore avec les collectivités locales et autres acteurs (ONG, associations, société civile)",
+          "type": "rating_1_5",
+          "options": [
+            {
+              "value": 1,
+              "label": "Aucune collaboration"
+            },
+            {
+              "value": 2,
+              "label": "Collaboration informelle avec une ou deux structures"
+            },
+            {
+              "value": 3,
+              "label": "Collaboration formelle avec une ou deux structures"
+            },
+            {
+              "value": 4,
+              "label": "Collaboration informelle et régulière avec plus de deux structures"
+            },
+            {
+              "value": 5,
+              "label": "Collaboration formelle et régulière avec plus de deux structures étatiques et privées"
+            }
+          ],
+          "required": true,
+          "validation": {
+            "min": 1,
+            "max": 5
+          },
+          "controle_coherence": null,
+          "preuve_attendue": null,
+          "storage_table": "evaluation_reponses"
+        },
+        {
+          "code": "10.5",
+          "section": 10,
+          "libelle": "Le COGES partage son PACC avec le Conseil Régional / la Mairie, l'autorité de l'Éducation (IEPP ou DRENA) et les autres partenaires",
+          "type": "rating_1_5",
+          "options": [
+            {
+              "value": 1,
+              "label": "Pas de partage du PACC"
+            },
+            {
+              "value": 2,
+              "label": "Partagé avec les autorités de l'Éducation uniquement"
+            },
+            {
+              "value": 3,
+              "label": "Partagé avec les autorités de l'Éducation et la Mairie, sans le Conseil Régional"
+            },
+            {
+              "value": 4,
+              "label": "Partagé avec les autorités de l'Éducation, la Mairie et le Conseil Régional"
+            },
+            {
+              "value": 5,
+              "label": "Partagé avec les autorités de l'Éducation, la Mairie, le Conseil Régional et d'autres partenaires techniques et financiers"
+            }
+          ],
+          "required": true,
+          "validation": {
+            "min": 1,
+            "max": 5
+          },
+          "controle_coherence": null,
+          "preuve_attendue": null,
+          "storage_table": "evaluation_reponses"
+        },
+        {
+          "code": "10.6",
+          "section": 10,
+          "libelle": "Le Bureau Exécutif entretient des relations institutionnelles avec les autres COGES de la localité",
+          "type": "rating_1_5",
+          "options": [
+            {
+              "value": 1,
+              "label": "Aucune relation"
+            },
+            {
+              "value": 2,
+              "label": "Relations informelles"
+            },
+            {
+              "value": 3,
+              "label": "Relations formelles"
+            },
+            {
+              "value": 4,
+              "label": "Collaboration avec l'ensemble des COGES de la localité, sans chronogramme"
+            },
+            {
+              "value": 5,
+              "label": "Collaboration avec l'ensemble des COGES de la localité, avec chronogramme précis de réunions"
+            }
+          ],
+          "required": true,
+          "validation": {
+            "min": 1,
+            "max": 5
+          },
+          "controle_coherence": null,
+          "preuve_attendue": null,
+          "storage_table": "evaluation_reponses"
+        }
+      ]
+    },
+    {
+      "num": 11,
+      "titre": "Contribution à la qualité de l'éducation",
+      "objectif": "Mesurer l'implication concrète du COGES dans l'amélioration des résultats scolaires.",
+      "type_donnees": "Item noté 1 à 5",
+      "intro": null,
+      "repetable": false,
+      "storage_table_defaut": "evaluation_reponses",
+      "questions": [
+        {
+          "code": "11.1",
+          "section": 11,
+          "libelle": "Contribution du COGES à l'amélioration des résultats scolaires",
+          "type": "rating_1_5",
+          "options": [
+            {
+              "value": 1,
+              "label": "Aucune initiative en faveur des résultats scolaires"
+            },
+            {
+              "value": 2,
+              "label": "Initiatives ponctuelles, sans suivi des élèves en difficulté"
+            },
+            {
+              "value": 3,
+              "label": "Contribue à la mise en place d'infrastructures scolaires (bibliothèque, cantine, latrines, terrain de sport)"
+            },
+            {
+              "value": 4,
+              "label": "S'intéresse activement au suivi scolaire et à la santé des élèves"
+            },
+            {
+              "value": 5,
+              "label": "Favorise en outre la scolarisation des enfants, notamment des filles"
+            }
+          ],
+          "required": true,
+          "validation": {
+            "min": 1,
+            "max": 5
+          },
+          "controle_coherence": null,
+          "preuve_attendue": null,
+          "storage_table": "evaluation_reponses"
+        }
+      ]
+    },
+    {
+      "num": 12,
+      "titre": "Santé scolaire, protection de l'enfant et inclusion",
+      "objectif": "Apprécier l'implication du COGES dans la protection de l'enfant et la santé scolaire.",
+      "type_donnees": "Items notés 1 à 5",
+      "intro": null,
+      "repetable": false,
+      "storage_table_defaut": "evaluation_reponses",
+      "questions": [
+        {
+          "code": "12.1",
+          "section": 12,
+          "libelle": "Contribution du COGES à la protection de l'enfant",
+          "type": "rating_1_5",
+          "options": [
+            {
+              "value": 1,
+              "label": "Aucune action de sensibilisation sur la protection de l'enfant"
+            },
+            {
+              "value": 2,
+              "label": "S'assure que les enfants inscrits disposent d'un extrait de naissance"
+            },
+            {
+              "value": 3,
+              "label": "Organise des séances de sensibilisation sur l'importance de l'extrait de naissance"
+            },
+            {
+              "value": 4,
+              "label": "Vulgarise les principaux droits de l'enfant"
+            },
+            {
+              "value": 5,
+              "label": "Notifie les cas de maltraitance d'enfants aux autorités compétentes"
+            }
+          ],
+          "required": true,
+          "validation": {
+            "min": 1,
+            "max": 5
+          },
+          "controle_coherence": null,
+          "preuve_attendue": "Documents liés aux actions de protection de l'enfant",
+          "storage_table": "evaluation_reponses"
+        },
+        {
+          "code": "12.2",
+          "section": 12,
+          "libelle": "Contribution du COGES au bien-être social et sanitaire de l'enfant",
+          "type": "rating_1_5",
+          "options": [
+            {
+              "value": 1,
+              "label": "Aucune campagne de sensibilisation sur le bien-être sanitaire"
+            },
+            {
+              "value": 2,
+              "label": "Campagnes de sensibilisation organisées (visite médicale, calendrier vaccinal)"
+            },
+            {
+              "value": 3,
+              "label": "S'assure que les élèves ont été visités, vaccinés et suivis médicalement"
+            },
+            {
+              "value": 4,
+              "label": "S'implique dans des programmes sanitaires au bénéfice des élèves (déparasitage, Vitamine A, etc.)"
+            },
+            {
+              "value": 5,
+              "label": "Effectue un plaidoyer auprès des partenaires pour la prise en charge des élèves à besoins spécifiques"
+            }
+          ],
+          "required": true,
+          "validation": {
+            "min": 1,
+            "max": 5
+          },
+          "controle_coherence": null,
+          "preuve_attendue": "Documents liés à la santé scolaire",
+          "storage_table": "evaluation_reponses"
+        }
+      ]
+    },
+    {
+      "num": 13,
+      "titre": "Participation communautaire",
+      "objectif": "Évaluer le degré d'implication des parents et de la communauté dans la vie du COGES.",
+      "type_donnees": "Items notés 1 à 5",
+      "intro": null,
+      "repetable": false,
+      "storage_table_defaut": "evaluation_reponses",
+      "questions": [
+        {
+          "code": "13.1",
+          "section": 13,
+          "libelle": "Le COGES consulte régulièrement les parents d'élèves pour identifier leurs besoins",
+          "type": "rating_1_5",
+          "options": [
+            {
+              "value": 1,
+              "label": "Jamais"
+            },
+            {
+              "value": 2,
+              "label": "Très rarement"
+            },
+            {
+              "value": 3,
+              "label": "Quelquefois, sans compte rendu"
+            },
+            {
+              "value": 4,
+              "label": "Souvent, avec compte rendu"
+            },
+            {
+              "value": 5,
+              "label": "Systématiquement, avec compte rendu écrit"
+            }
+          ],
+          "required": true,
+          "validation": {
+            "min": 1,
+            "max": 5
+          },
+          "controle_coherence": null,
+          "preuve_attendue": null,
+          "storage_table": "evaluation_reponses"
+        },
+        {
+          "code": "13.2",
+          "section": 13,
+          "libelle": "Implication des 3 parents membres (santé scolaire, communication/mobilisation communautaire, suivi des travaux/suivi pédagogique)",
+          "type": "rating_1_5",
+          "options": [
+            {
+              "value": 1,
+              "label": "Aucun parent membre n'est impliqué"
+            },
+            {
+              "value": 2,
+              "label": "Un seul parent membre est impliqué"
+            },
+            {
+              "value": 3,
+              "label": "Deux parents membres sont impliqués"
+            },
+            {
+              "value": 4,
+              "label": "Les trois parents membres sont impliqués mais ne rendent pas compte au Bureau Exécutif"
+            },
+            {
+              "value": 5,
+              "label": "Les trois parents membres sont impliqués et rendent compte au Bureau Exécutif"
+            }
+          ],
+          "required": true,
+          "validation": {
+            "min": 1,
+            "max": 5
+          },
+          "controle_coherence": null,
+          "preuve_attendue": null,
+          "storage_table": "evaluation_reponses"
+        }
+      ]
+    },
+    {
+      "num": 14,
+      "titre": "Genre et représentativité",
+      "objectif": "Mesurer la représentativité des femmes dans les instances de décision du COGES.",
+      "type_donnees": "Item noté 1 à 5, calculé",
+      "intro": null,
+      "repetable": false,
+      "storage_table_defaut": "evaluation_reponses",
+      "questions": [
+        {
+          "code": "14.1",
+          "section": 14,
+          "libelle": "Proportion de femmes dans les postes de décision du COGES",
+          "type": "rating_1_5",
+          "options": [
+            {
+              "value": 1,
+              "label": "Aucune femme"
+            },
+            {
+              "value": 2,
+              "label": "Moins de 10 %"
+            },
+            {
+              "value": 3,
+              "label": "Entre 10 % et 30 %"
+            },
+            {
+              "value": 4,
+              "label": "Entre 30 % et 50 %"
+            },
+            {
+              "value": 5,
+              "label": "Plus de 50 %, y compris à des postes clés"
+            }
+          ],
+          "required": true,
+          "validation": {
+            "min": 1,
+            "max": 5
+          },
+          "controle_coherence": "Calculé = nombre de femmes occupant un poste de décision / effectif total des postes de décision",
+          "preuve_attendue": null,
+          "storage_table": "evaluation_reponses"
+        }
+      ]
+    },
+    {
+      "num": 15,
+      "titre": "Résilience et durabilité",
+      "objectif": "Vérifier l'existence d'un dispositif de résilience face aux situations d'urgence ou de crise.",
+      "type_donnees": "Item noté 1 à 5",
+      "intro": null,
+      "repetable": false,
+      "storage_table_defaut": "evaluation_reponses",
+      "questions": [
+        {
+          "code": "15.1",
+          "section": 15,
+          "libelle": "Le COGES dispose d'un fonds d'urgence pour les situations de crise (pandémies, catastrophes, etc.)",
+          "type": "rating_1_5",
+          "options": [
+            {
+              "value": 1,
+              "label": "N'existe pas"
+            },
+            {
+              "value": 2,
+              "label": "Existe mais de façon non formelle"
+            },
+            {
+              "value": 3,
+              "label": "Existe, géré par l'administration scolaire"
+            },
+            {
+              "value": 4,
+              "label": "Existe, détenu par le Bureau Exécutif"
+            },
+            {
+              "value": 5,
+              "label": "Existe, avec une disponibilité immédiate en cas de besoin"
+            }
+          ],
+          "required": true,
+          "validation": {
+            "min": 1,
+            "max": 5
+          },
+          "controle_coherence": null,
+          "preuve_attendue": null,
+          "storage_table": "evaluation_reponses"
+        }
+      ]
+    },
+    {
+      "num": 16,
+      "titre": "Profil synthétique des membres du Bureau Exécutif",
+      "objectif": "Recueillir de façon compacte le profil de chaque membre clé du Bureau Exécutif (formation, alphabétisation, maîtrise du rôle), en évitant la répétition intégrale des mêmes questions poste par poste.",
+      "type_donnees": "Bloc répétitif (fiche standard), appliqué à 11 postes",
+      "intro": "La fiche ci-dessous est renseignée une fois pour chacun des 11 postes suivants : Président du BE, Vice-Président, Secrétaire Général, Secrétaire Général Adjoint, Trésorier Général, Trésorier Général Adjoint, Parent membre 1, Parent membre 2, Parent membre 3, Élève 1, Élève 2. Elle remplace les 58 questions individuelles répétées du formulaire d'origine (questions 62 à 119).",
+      "repetable": true,
+      "repeat_instances": [
+        {
+          "poste_libelle": "Président du BE",
+          "fonction": "president"
+        },
+        {
+          "poste_libelle": "Vice-Président",
+          "fonction": "vice_president"
+        },
+        {
+          "poste_libelle": "Secrétaire Général",
+          "fonction": "secretaire_general"
+        },
+        {
+          "poste_libelle": "Secrétaire Général Adjoint",
+          "fonction": "secretaire_general_adjoint"
+        },
+        {
+          "poste_libelle": "Trésorier Général",
+          "fonction": "tresorier_general"
+        },
+        {
+          "poste_libelle": "Trésorier Général Adjoint",
+          "fonction": "tresorier_general_adjoint"
+        },
+        {
+          "poste_libelle": "Parent membre 1",
+          "fonction": "parent_membre"
+        },
+        {
+          "poste_libelle": "Parent membre 2",
+          "fonction": "parent_membre"
+        },
+        {
+          "poste_libelle": "Parent membre 3",
+          "fonction": "parent_membre"
+        },
+        {
+          "poste_libelle": "Élève 1",
+          "fonction": "eleve"
+        },
+        {
+          "poste_libelle": "Élève 2",
+          "fonction": "eleve"
+        }
+      ],
+      "storage_table_defaut": "membres_be",
+      "questions": [
+        {
+          "code": "16.1",
+          "section": 16,
+          "libelle": "Nom et prénoms",
+          "type": "text",
+          "required": true,
+          "controle_coherence": null,
+          "preuve_attendue": null,
+          "storage_table": "membres_be",
+          "storage_column": "nom_prenoms",
+          "storage_note": "Jamais evaluation_reponses (règle obligatoire)."
+        },
+        {
+          "code": "16.2",
+          "section": 16,
+          "libelle": "Genre",
+          "type": "select",
+          "options": [
+            {
+              "value": "homme",
+              "label": "Homme"
+            },
+            {
+              "value": "femme",
+              "label": "Femme"
+            }
+          ],
+          "required": true,
+          "controle_coherence": null,
+          "preuve_attendue": null,
+          "storage_table": "membres_be",
+          "storage_column": "genre",
+          "storage_note": "Jamais evaluation_reponses (règle obligatoire)."
+        },
+        {
+          "code": "16.3",
+          "section": 16,
+          "libelle": "Fonction",
+          "type": "select",
+          "options": [
+            {
+              "value": "president",
+              "label": "Président"
+            },
+            {
+              "value": "vice_president",
+              "label": "Vice-Président"
+            },
+            {
+              "value": "secretaire_general",
+              "label": "Secrétaire Général"
+            },
+            {
+              "value": "secretaire_general_adjoint",
+              "label": "Secrétaire Général Adjoint"
+            },
+            {
+              "value": "tresorier_general",
+              "label": "Trésorier Général"
+            },
+            {
+              "value": "tresorier_general_adjoint",
+              "label": "Trésorier Général Adjoint"
+            },
+            {
+              "value": "parent_membre",
+              "label": "Parent membre"
+            },
+            {
+              "value": "eleve",
+              "label": "Élève"
+            }
+          ],
+          "required": true,
+          "controle_coherence": null,
+          "preuve_attendue": null,
+          "auto_fill": {
+            "source": "repeat_instance.fonction",
+            "editable": false,
+            "note": "Pré-rempli et verrouillé à partir du poste en cours de saisie (cf. repeat_instances de la Section 16) — l'enquêteur ne doit pas pouvoir choisir une fonction différente du poste affiché."
+          },
+          "storage_table": "membres_be",
+          "storage_column": "fonction",
+          "storage_note": "Jamais evaluation_reponses (règle obligatoire)."
+        },
+        {
+          "code": "16.4",
+          "section": 16,
+          "libelle": "Sait lire et écrire en français",
+          "type": "select",
+          "options": [
+            {
+              "value": "oui",
+              "label": "Oui"
+            },
+            {
+              "value": "non",
+              "label": "Non"
+            }
+          ],
+          "boolean_mapping": {
+            "oui": true,
+            "non": false
+          },
+          "required": true,
+          "controle_coherence": null,
+          "preuve_attendue": null,
+          "storage_table": "membres_be",
+          "storage_column": "lit_ecrit_francais",
+          "storage_note": "Jamais evaluation_reponses (règle obligatoire)."
+        },
+        {
+          "code": "16.5",
+          "section": 16,
+          "libelle": "Sait lire et écrire en langue locale",
+          "type": "select",
+          "options": [
+            {
+              "value": "oui",
+              "label": "Oui"
+            },
+            {
+              "value": "non",
+              "label": "Non"
+            }
+          ],
+          "boolean_mapping": {
+            "oui": true,
+            "non": false
+          },
+          "required": true,
+          "controle_coherence": null,
+          "preuve_attendue": null,
+          "storage_table": "membres_be",
+          "storage_column": "lit_ecrit_langue_locale",
+          "storage_note": "Jamais evaluation_reponses (règle obligatoire)."
+        },
+        {
+          "code": "16.6",
+          "section": 16,
+          "libelle": "Niveau d'étude ou diplôme obtenu",
+          "type": "select",
+          "options": [
+            {
+              "value": "aucun",
+              "label": "Aucun"
+            },
+            {
+              "value": "primaire",
+              "label": "Primaire"
+            },
+            {
+              "value": "secondaire_1er_cycle",
+              "label": "Secondaire 1er cycle"
+            },
+            {
+              "value": "secondaire_2nd_cycle",
+              "label": "Secondaire 2nd cycle"
+            },
+            {
+              "value": "superieur",
+              "label": "Supérieur"
+            }
+          ],
+          "required": true,
+          "controle_coherence": null,
+          "preuve_attendue": null,
+          "storage_table": "membres_be",
+          "storage_column": "niveau_etude",
+          "storage_note": "Jamais evaluation_reponses (règle obligatoire)."
+        },
+        {
+          "code": "16.7",
+          "section": 16,
+          "libelle": "Profession",
+          "type": "text",
+          "required": true,
+          "controle_coherence": null,
+          "preuve_attendue": null,
+          "storage_table": "membres_be",
+          "storage_column": "profession",
+          "storage_note": "Jamais evaluation_reponses (règle obligatoire)."
+        },
+        {
+          "code": "16.8",
+          "section": 16,
+          "libelle": "A reçu une formation COGES",
+          "type": "select",
+          "options": [
+            {
+              "value": "oui",
+              "label": "Oui"
+            },
+            {
+              "value": "non",
+              "label": "Non"
+            }
+          ],
+          "boolean_mapping": {
+            "oui": true,
+            "non": false
+          },
+          "required": true,
+          "controle_coherence": null,
+          "preuve_attendue": null,
+          "storage_table": "membres_be",
+          "storage_column": "formation_coges",
+          "storage_note": "Jamais evaluation_reponses (règle obligatoire)."
+        },
+        {
+          "code": "16.9",
+          "section": 16,
+          "libelle": "Module de formation connu (si formé)",
+          "type": "text",
+          "required": false,
+          "controle_coherence": "Affiché seulement si 16.8 = Oui",
+          "preuve_attendue": null,
+          "conditional": {
+            "dependsOn": "16.8",
+            "showWhen": "oui"
+          },
+          "storage_table": "membres_be",
+          "storage_column": "module_formation",
+          "storage_note": "Jamais evaluation_reponses (règle obligatoire)."
+        },
+        {
+          "code": "16.10",
+          "section": 16,
+          "libelle": "Maîtrise de son rôle",
+          "type": "select",
+          "options": [
+            {
+              "value": "faible",
+              "label": "Faible"
+            },
+            {
+              "value": "moyenne",
+              "label": "Moyenne"
+            },
+            {
+              "value": "bonne",
+              "label": "Bonne"
+            }
+          ],
+          "required": true,
+          "controle_coherence": null,
+          "preuve_attendue": null,
+          "storage_table": "membres_be",
+          "storage_column": "maitrise_role",
+          "storage_note": "Jamais evaluation_reponses (règle obligatoire)."
+        }
+      ]
+    },
+    {
+      "num": 17,
+      "titre": "Vérification des preuves documentaires",
+      "objectif": "Consolider en un point unique la vérification physique de l'ensemble des preuves documentaires attendues, déjà référencées dans les sections précédentes.",
+      "type_donnees": "Liste de vérification, une ligne par document",
+      "intro": "Pour chaque document, l'enquêteur sélectionne l'une des cinq modalités suivantes : Disponible et consultée ; Disponible mais non consultée ; Déclarée mais non présentée ; Non disponible ; Non applicable.",
+      "repetable": false,
+      "storage_table_defaut": "preuves_documentaires",
+      "questions": [
+        {
+          "code": "17.1",
+          "section": 17,
+          "libelle": "Textes réglementaires",
+          "type": "select",
+          "options": [
+            {
+              "value": "disponible_consultee",
+              "label": "Disponible et consultée"
+            },
+            {
+              "value": "disponible_non_consultee",
+              "label": "Disponible mais non consultée"
+            },
+            {
+              "value": "declaree_non_presentee",
+              "label": "Déclarée mais non présentée"
+            },
+            {
+              "value": "non_disponible",
+              "label": "Non disponible"
+            },
+            {
+              "value": "non_applicable",
+              "label": "Non applicable"
+            }
+          ],
+          "required": true,
+          "controle_coherence": null,
+          "preuve_attendue": null,
+          "storage_table": "preuves_documentaires",
+          "storage_column": "statut",
+          "storage_note": "type_preuve = libellé de la question ; jamais evaluation_reponses."
+        },
+        {
+          "code": "17.2",
+          "section": 17,
+          "libelle": "Règlement intérieur",
+          "type": "select",
+          "options": [
+            {
+              "value": "disponible_consultee",
+              "label": "Disponible et consultée"
+            },
+            {
+              "value": "disponible_non_consultee",
+              "label": "Disponible mais non consultée"
+            },
+            {
+              "value": "declaree_non_presentee",
+              "label": "Déclarée mais non présentée"
+            },
+            {
+              "value": "non_disponible",
+              "label": "Non disponible"
+            },
+            {
+              "value": "non_applicable",
+              "label": "Non applicable"
+            }
+          ],
+          "required": true,
+          "controle_coherence": null,
+          "preuve_attendue": null,
+          "storage_table": "preuves_documentaires",
+          "storage_column": "statut",
+          "storage_note": "type_preuve = libellé de la question ; jamais evaluation_reponses."
+        },
+        {
+          "code": "17.3",
+          "section": 17,
+          "libelle": "Liste actualisée des membres du Bureau Exécutif",
+          "type": "select",
+          "options": [
+            {
+              "value": "disponible_consultee",
+              "label": "Disponible et consultée"
+            },
+            {
+              "value": "disponible_non_consultee",
+              "label": "Disponible mais non consultée"
+            },
+            {
+              "value": "declaree_non_presentee",
+              "label": "Déclarée mais non présentée"
+            },
+            {
+              "value": "non_disponible",
+              "label": "Non disponible"
+            },
+            {
+              "value": "non_applicable",
+              "label": "Non applicable"
+            }
+          ],
+          "required": true,
+          "controle_coherence": null,
+          "preuve_attendue": null,
+          "storage_table": "preuves_documentaires",
+          "storage_column": "statut",
+          "storage_note": "type_preuve = libellé de la question ; jamais evaluation_reponses."
+        },
+        {
+          "code": "17.4",
+          "section": 17,
+          "libelle": "PV de la dernière AG élective",
+          "type": "select",
+          "options": [
+            {
+              "value": "disponible_consultee",
+              "label": "Disponible et consultée"
+            },
+            {
+              "value": "disponible_non_consultee",
+              "label": "Disponible mais non consultée"
+            },
+            {
+              "value": "declaree_non_presentee",
+              "label": "Déclarée mais non présentée"
+            },
+            {
+              "value": "non_disponible",
+              "label": "Non disponible"
+            },
+            {
+              "value": "non_applicable",
+              "label": "Non applicable"
+            }
+          ],
+          "required": true,
+          "controle_coherence": null,
+          "preuve_attendue": null,
+          "storage_table": "preuves_documentaires",
+          "storage_column": "statut",
+          "storage_note": "type_preuve = libellé de la question ; jamais evaluation_reponses."
+        },
+        {
+          "code": "17.5",
+          "section": 17,
+          "libelle": "PV des réunions du Bureau Exécutif",
+          "type": "select",
+          "options": [
+            {
+              "value": "disponible_consultee",
+              "label": "Disponible et consultée"
+            },
+            {
+              "value": "disponible_non_consultee",
+              "label": "Disponible mais non consultée"
+            },
+            {
+              "value": "declaree_non_presentee",
+              "label": "Déclarée mais non présentée"
+            },
+            {
+              "value": "non_disponible",
+              "label": "Non disponible"
+            },
+            {
+              "value": "non_applicable",
+              "label": "Non applicable"
+            }
+          ],
+          "required": true,
+          "controle_coherence": null,
+          "preuve_attendue": null,
+          "storage_table": "preuves_documentaires",
+          "storage_column": "statut",
+          "storage_note": "type_preuve = libellé de la question ; jamais evaluation_reponses."
+        },
+        {
+          "code": "17.6",
+          "section": 17,
+          "libelle": "Liste de présence aux réunions",
+          "type": "select",
+          "options": [
+            {
+              "value": "disponible_consultee",
+              "label": "Disponible et consultée"
+            },
+            {
+              "value": "disponible_non_consultee",
+              "label": "Disponible mais non consultée"
+            },
+            {
+              "value": "declaree_non_presentee",
+              "label": "Déclarée mais non présentée"
+            },
+            {
+              "value": "non_disponible",
+              "label": "Non disponible"
+            },
+            {
+              "value": "non_applicable",
+              "label": "Non applicable"
+            }
+          ],
+          "required": true,
+          "controle_coherence": null,
+          "preuve_attendue": null,
+          "storage_table": "preuves_documentaires",
+          "storage_column": "statut",
+          "storage_note": "type_preuve = libellé de la question ; jamais evaluation_reponses."
+        },
+        {
+          "code": "17.7",
+          "section": 17,
+          "libelle": "PACC",
+          "type": "select",
+          "options": [
+            {
+              "value": "disponible_consultee",
+              "label": "Disponible et consultée"
+            },
+            {
+              "value": "disponible_non_consultee",
+              "label": "Disponible mais non consultée"
+            },
+            {
+              "value": "declaree_non_presentee",
+              "label": "Déclarée mais non présentée"
+            },
+            {
+              "value": "non_disponible",
+              "label": "Non disponible"
+            },
+            {
+              "value": "non_applicable",
+              "label": "Non applicable"
+            }
+          ],
+          "required": true,
+          "controle_coherence": null,
+          "preuve_attendue": null,
+          "storage_table": "preuves_documentaires",
+          "storage_column": "statut",
+          "storage_note": "type_preuve = libellé de la question ; jamais evaluation_reponses."
+        },
+        {
+          "code": "17.8",
+          "section": 17,
+          "libelle": "Budget annuel",
+          "type": "select",
+          "options": [
+            {
+              "value": "disponible_consultee",
+              "label": "Disponible et consultée"
+            },
+            {
+              "value": "disponible_non_consultee",
+              "label": "Disponible mais non consultée"
+            },
+            {
+              "value": "declaree_non_presentee",
+              "label": "Déclarée mais non présentée"
+            },
+            {
+              "value": "non_disponible",
+              "label": "Non disponible"
+            },
+            {
+              "value": "non_applicable",
+              "label": "Non applicable"
+            }
+          ],
+          "required": true,
+          "controle_coherence": null,
+          "preuve_attendue": null,
+          "storage_table": "preuves_documentaires",
+          "storage_column": "statut",
+          "storage_note": "type_preuve = libellé de la question ; jamais evaluation_reponses."
+        },
+        {
+          "code": "17.9",
+          "section": 17,
+          "libelle": "Rapport d'activités",
+          "type": "select",
+          "options": [
+            {
+              "value": "disponible_consultee",
+              "label": "Disponible et consultée"
+            },
+            {
+              "value": "disponible_non_consultee",
+              "label": "Disponible mais non consultée"
+            },
+            {
+              "value": "declaree_non_presentee",
+              "label": "Déclarée mais non présentée"
+            },
+            {
+              "value": "non_disponible",
+              "label": "Non disponible"
+            },
+            {
+              "value": "non_applicable",
+              "label": "Non applicable"
+            }
+          ],
+          "required": true,
+          "controle_coherence": null,
+          "preuve_attendue": null,
+          "storage_table": "preuves_documentaires",
+          "storage_column": "statut",
+          "storage_note": "type_preuve = libellé de la question ; jamais evaluation_reponses."
+        },
+        {
+          "code": "17.10",
+          "section": 17,
+          "libelle": "Rapport financier",
+          "type": "select",
+          "options": [
+            {
+              "value": "disponible_consultee",
+              "label": "Disponible et consultée"
+            },
+            {
+              "value": "disponible_non_consultee",
+              "label": "Disponible mais non consultée"
+            },
+            {
+              "value": "declaree_non_presentee",
+              "label": "Déclarée mais non présentée"
+            },
+            {
+              "value": "non_disponible",
+              "label": "Non disponible"
+            },
+            {
+              "value": "non_applicable",
+              "label": "Non applicable"
+            }
+          ],
+          "required": true,
+          "controle_coherence": null,
+          "preuve_attendue": null,
+          "storage_table": "preuves_documentaires",
+          "storage_column": "statut",
+          "storage_note": "type_preuve = libellé de la question ; jamais evaluation_reponses."
+        },
+        {
+          "code": "17.11",
+          "section": 17,
+          "libelle": "Bilan financier",
+          "type": "select",
+          "options": [
+            {
+              "value": "disponible_consultee",
+              "label": "Disponible et consultée"
+            },
+            {
+              "value": "disponible_non_consultee",
+              "label": "Disponible mais non consultée"
+            },
+            {
+              "value": "declaree_non_presentee",
+              "label": "Déclarée mais non présentée"
+            },
+            {
+              "value": "non_disponible",
+              "label": "Non disponible"
+            },
+            {
+              "value": "non_applicable",
+              "label": "Non applicable"
+            }
+          ],
+          "required": true,
+          "controle_coherence": null,
+          "preuve_attendue": null,
+          "storage_table": "preuves_documentaires",
+          "storage_column": "statut",
+          "storage_note": "type_preuve = libellé de la question ; jamais evaluation_reponses."
+        },
+        {
+          "code": "17.12",
+          "section": 17,
+          "libelle": "Journal de caisse",
+          "type": "select",
+          "options": [
+            {
+              "value": "disponible_consultee",
+              "label": "Disponible et consultée"
+            },
+            {
+              "value": "disponible_non_consultee",
+              "label": "Disponible mais non consultée"
+            },
+            {
+              "value": "declaree_non_presentee",
+              "label": "Déclarée mais non présentée"
+            },
+            {
+              "value": "non_disponible",
+              "label": "Non disponible"
+            },
+            {
+              "value": "non_applicable",
+              "label": "Non applicable"
+            }
+          ],
+          "required": true,
+          "controle_coherence": null,
+          "preuve_attendue": null,
+          "storage_table": "preuves_documentaires",
+          "storage_column": "statut",
+          "storage_note": "type_preuve = libellé de la question ; jamais evaluation_reponses."
+        },
+        {
+          "code": "17.13",
+          "section": 17,
+          "libelle": "Journal de banque",
+          "type": "select",
+          "options": [
+            {
+              "value": "disponible_consultee",
+              "label": "Disponible et consultée"
+            },
+            {
+              "value": "disponible_non_consultee",
+              "label": "Disponible mais non consultée"
+            },
+            {
+              "value": "declaree_non_presentee",
+              "label": "Déclarée mais non présentée"
+            },
+            {
+              "value": "non_disponible",
+              "label": "Non disponible"
+            },
+            {
+              "value": "non_applicable",
+              "label": "Non applicable"
+            }
+          ],
+          "required": true,
+          "controle_coherence": null,
+          "preuve_attendue": null,
+          "storage_table": "preuves_documentaires",
+          "storage_column": "statut",
+          "storage_note": "type_preuve = libellé de la question ; jamais evaluation_reponses."
+        },
+        {
+          "code": "17.14",
+          "section": 17,
+          "libelle": "Registre des biens",
+          "type": "select",
+          "options": [
+            {
+              "value": "disponible_consultee",
+              "label": "Disponible et consultée"
+            },
+            {
+              "value": "disponible_non_consultee",
+              "label": "Disponible mais non consultée"
+            },
+            {
+              "value": "declaree_non_presentee",
+              "label": "Déclarée mais non présentée"
+            },
+            {
+              "value": "non_disponible",
+              "label": "Non disponible"
+            },
+            {
+              "value": "non_applicable",
+              "label": "Non applicable"
+            }
+          ],
+          "required": true,
+          "controle_coherence": null,
+          "preuve_attendue": null,
+          "storage_table": "preuves_documentaires",
+          "storage_column": "statut",
+          "storage_note": "type_preuve = libellé de la question ; jamais evaluation_reponses."
+        },
+        {
+          "code": "17.15",
+          "section": 17,
+          "libelle": "RIB ou document bancaire",
+          "type": "select",
+          "options": [
+            {
+              "value": "disponible_consultee",
+              "label": "Disponible et consultée"
+            },
+            {
+              "value": "disponible_non_consultee",
+              "label": "Disponible mais non consultée"
+            },
+            {
+              "value": "declaree_non_presentee",
+              "label": "Déclarée mais non présentée"
+            },
+            {
+              "value": "non_disponible",
+              "label": "Non disponible"
+            },
+            {
+              "value": "non_applicable",
+              "label": "Non applicable"
+            }
+          ],
+          "required": true,
+          "controle_coherence": null,
+          "preuve_attendue": null,
+          "storage_table": "preuves_documentaires",
+          "storage_column": "statut",
+          "storage_note": "type_preuve = libellé de la question ; jamais evaluation_reponses."
+        },
+        {
+          "code": "17.16",
+          "section": 17,
+          "libelle": "Carnet d'activités et de retrait",
+          "type": "select",
+          "options": [
+            {
+              "value": "disponible_consultee",
+              "label": "Disponible et consultée"
+            },
+            {
+              "value": "disponible_non_consultee",
+              "label": "Disponible mais non consultée"
+            },
+            {
+              "value": "declaree_non_presentee",
+              "label": "Déclarée mais non présentée"
+            },
+            {
+              "value": "non_disponible",
+              "label": "Non disponible"
+            },
+            {
+              "value": "non_applicable",
+              "label": "Non applicable"
+            }
+          ],
+          "required": true,
+          "controle_coherence": null,
+          "preuve_attendue": null,
+          "storage_table": "preuves_documentaires",
+          "storage_column": "statut",
+          "storage_note": "type_preuve = libellé de la question ; jamais evaluation_reponses."
+        },
+        {
+          "code": "17.17",
+          "section": 17,
+          "libelle": "Cahier de visite",
+          "type": "select",
+          "options": [
+            {
+              "value": "disponible_consultee",
+              "label": "Disponible et consultée"
+            },
+            {
+              "value": "disponible_non_consultee",
+              "label": "Disponible mais non consultée"
+            },
+            {
+              "value": "declaree_non_presentee",
+              "label": "Déclarée mais non présentée"
+            },
+            {
+              "value": "non_disponible",
+              "label": "Non disponible"
+            },
+            {
+              "value": "non_applicable",
+              "label": "Non applicable"
+            }
+          ],
+          "required": true,
+          "controle_coherence": null,
+          "preuve_attendue": null,
+          "storage_table": "preuves_documentaires",
+          "storage_column": "statut",
+          "storage_note": "type_preuve = libellé de la question ; jamais evaluation_reponses."
+        },
+        {
+          "code": "17.18",
+          "section": 17,
+          "libelle": "Preuves d'appuis reçus des partenaires",
+          "type": "select",
+          "options": [
+            {
+              "value": "disponible_consultee",
+              "label": "Disponible et consultée"
+            },
+            {
+              "value": "disponible_non_consultee",
+              "label": "Disponible mais non consultée"
+            },
+            {
+              "value": "declaree_non_presentee",
+              "label": "Déclarée mais non présentée"
+            },
+            {
+              "value": "non_disponible",
+              "label": "Non disponible"
+            },
+            {
+              "value": "non_applicable",
+              "label": "Non applicable"
+            }
+          ],
+          "required": true,
+          "controle_coherence": null,
+          "preuve_attendue": null,
+          "storage_table": "preuves_documentaires",
+          "storage_column": "statut",
+          "storage_note": "type_preuve = libellé de la question ; jamais evaluation_reponses."
+        },
+        {
+          "code": "17.19",
+          "section": 17,
+          "libelle": "Documents relatifs aux AGR",
+          "type": "select",
+          "options": [
+            {
+              "value": "disponible_consultee",
+              "label": "Disponible et consultée"
+            },
+            {
+              "value": "disponible_non_consultee",
+              "label": "Disponible mais non consultée"
+            },
+            {
+              "value": "declaree_non_presentee",
+              "label": "Déclarée mais non présentée"
+            },
+            {
+              "value": "non_disponible",
+              "label": "Non disponible"
+            },
+            {
+              "value": "non_applicable",
+              "label": "Non applicable"
+            }
+          ],
+          "required": true,
+          "controle_coherence": null,
+          "preuve_attendue": null,
+          "storage_table": "preuves_documentaires",
+          "storage_column": "statut",
+          "storage_note": "type_preuve = libellé de la question ; jamais evaluation_reponses."
+        },
+        {
+          "code": "17.20",
+          "section": 17,
+          "libelle": "Documents liés aux actions de protection de l'enfant ou de santé scolaire",
+          "type": "select",
+          "options": [
+            {
+              "value": "disponible_consultee",
+              "label": "Disponible et consultée"
+            },
+            {
+              "value": "disponible_non_consultee",
+              "label": "Disponible mais non consultée"
+            },
+            {
+              "value": "declaree_non_presentee",
+              "label": "Déclarée mais non présentée"
+            },
+            {
+              "value": "non_disponible",
+              "label": "Non disponible"
+            },
+            {
+              "value": "non_applicable",
+              "label": "Non applicable"
+            }
+          ],
+          "required": true,
+          "controle_coherence": null,
+          "preuve_attendue": null,
+          "storage_table": "preuves_documentaires",
+          "storage_column": "statut",
+          "storage_note": "type_preuve = libellé de la question ; jamais evaluation_reponses."
+        }
+      ]
+    },
+    {
+      "num": 18,
+      "titre": "Observations générales de l'équipe d'évaluation",
+      "objectif": "Recueillir l'appréciation libre et contextualisée de l'équipe d'évaluation sur la visite.",
+      "type_donnees": "Texte libre",
+      "intro": null,
+      "repetable": false,
+      "storage_table_defaut": "evaluation_reponses",
+      "questions": [
+        {
+          "code": "18.1",
+          "section": 18,
+          "libelle": "Observations générales de l'équipe d'évaluation",
+          "type": "textarea",
+          "required": false,
+          "controle_coherence": null,
+          "preuve_attendue": null,
+          "storage_table": "evaluations",
+          "storage_column": "observations_generales"
+        }
+      ]
+    },
+    {
+      "num": 19,
+      "titre": "Recommandations prioritaires",
+      "objectif": "Recueillir les questions qualitatives qui éclairent l'interprétation des scores et orientent les recommandations.",
+      "type_donnees": "Texte libre",
+      "intro": null,
+      "repetable": false,
+      "storage_table_defaut": "recommandations",
+      "questions": [
+        {
+          "code": "19.1",
+          "section": 19,
+          "libelle": "Quelles sont les trois principales forces du COGES ?",
+          "type": "textarea",
+          "required": true,
+          "controle_coherence": null,
+          "preuve_attendue": null,
+          "storage_table": "recommandations",
+          "storage_column": "forces"
+        },
+        {
+          "code": "19.2",
+          "section": 19,
+          "libelle": "Quelles sont les trois principales faiblesses du COGES ?",
+          "type": "textarea",
+          "required": true,
+          "controle_coherence": null,
+          "preuve_attendue": null,
+          "storage_table": "recommandations",
+          "storage_column": "faiblesses"
+        },
+        {
+          "code": "19.3",
+          "section": 19,
+          "libelle": "Quelles sont les difficultés majeures rencontrées dans le fonctionnement du COGES ?",
+          "type": "textarea",
+          "required": true,
+          "controle_coherence": null,
+          "preuve_attendue": null,
+          "storage_table": "recommandations",
+          "storage_column": "difficultes"
+        },
+        {
+          "code": "19.4",
+          "section": 19,
+          "libelle": "Quelles actions urgentes doivent être menées pour améliorer le fonctionnement du COGES ?",
+          "type": "textarea",
+          "required": true,
+          "controle_coherence": null,
+          "preuve_attendue": null,
+          "storage_table": "recommandations",
+          "storage_column": "actions_urgentes"
+        },
+        {
+          "code": "19.5",
+          "section": 19,
+          "libelle": "Quels appuis sont attendus de l'IEPP, de la DRENA, de la DAPS-COGES ou des partenaires ?",
+          "type": "textarea",
+          "required": true,
+          "controle_coherence": null,
+          "preuve_attendue": null,
+          "storage_table": "recommandations",
+          "storage_column": "appuis_attendus"
+        },
+        {
+          "code": "19.6",
+          "section": 19,
+          "libelle": "Recommandations prioritaires de l'équipe d'évaluation (classées par ordre de priorité)",
+          "type": "textarea",
+          "required": true,
+          "controle_coherence": null,
+          "preuve_attendue": null,
+          "storage_table": "recommandations",
+          "storage_column": "recommandations_prioritaires"
+        }
+      ]
+    },
+    {
+      "num": 20,
+      "titre": "Équipe d'évaluation",
+      "objectif": "Identifier les membres de l'équipe ayant réalisé l'évaluation, pour la traçabilité et le contrôle qualité.",
+      "type_donnees": "Bloc répétitif (1 à 4 évaluateurs)",
+      "intro": null,
+      "repetable": true,
+      "repeat_instances": {
+        "min": 1,
+        "max": 4
+      },
+      "storage_table_defaut": "equipes_evaluation",
+      "questions": [
+        {
+          "code": "20.1",
+          "section": 20,
+          "libelle": "Nom et prénoms de l'évaluateur",
+          "type": "text",
+          "required": true,
+          "controle_coherence": null,
+          "preuve_attendue": null,
+          "storage_table": "equipes_evaluation",
+          "storage_column": "nom_prenoms",
+          "storage_note": "Jamais evaluation_reponses (règle obligatoire)."
+        },
+        {
+          "code": "20.2",
+          "section": 20,
+          "libelle": "Fonction / structure de l'évaluateur",
+          "type": "text",
+          "required": true,
+          "controle_coherence": null,
+          "preuve_attendue": null,
+          "storage_table": "equipes_evaluation",
+          "storage_column": "fonction_structure",
+          "storage_note": "Jamais evaluation_reponses (règle obligatoire)."
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,6 @@
+{
+  "name": "EROF COGES",
+  "description": "Évaluation Rapide Organisationnelle et Fonctionnelle des COGES. Collecte, scoring et validation des données d'évaluation des COGES.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
