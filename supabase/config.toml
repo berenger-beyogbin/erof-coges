@@ -1,0 +1,23 @@
+project_id = "erof-coges"
+
+[api]
+enabled = true
+port = 54321
+schemas = ["public", "storage"]
+extra_search_path = ["public", "extensions"]
+max_rows = 1000
+
+[db]
+port = 54322
+shadow_port = 54320
+major_version = 15
+
+[db.seed]
+enabled = true
+sql_paths = ["./seed.sql"]
+
+[functions.admin-create-user]
+verify_jwt = true
+
+[functions.admin-reset-password]
+verify_jwt = true

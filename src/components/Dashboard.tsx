@@ -4,12 +4,9 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { 
-  DataService, 
-  PRE_SEEDED_DRENAS, 
-  PRE_SEEDED_IEPPS 
-} from '../data/dataService';
-import { Evaluation, User, EvaluationScore, PreuveDocumentaire, MembreBe, Recommandation, EvaluationStatus } from '../types';
+import { DataService } from '../data/dataService';
+import { Evaluation, User, EvaluationScore, PreuveDocumentaire, MembreBe, Recommandation, EvaluationStatus, Drena, Iepp } from '../types';
+import questionsErof from '../questions_erof.json';
 import { 
   School, 
   Search, 
@@ -28,7 +25,8 @@ import {
   RefreshCw, 
   Eye, 
   AlertTriangle,
-  Award
+  Award,
+  ExternalLink
 } from 'lucide-react';
 
 interface DashboardProps {
@@ -37,15 +35,247 @@ interface DashboardProps {
   onNewEvaluation: () => void;
 }
 
+const formSections = questionsErof.sections as any[];
+
+const emptyDisplay = 'Non renseigne';
+const ROWS_PER_PAGE = 10;
+
+function optionLabel(question: any, value: unknown): string {
+  if (value === undefined || value === null || value === '') return emptyDisplay;
+
+  let normalizedValue = String(value);
+  if (question.boolean_mapping && typeof value === 'boolean') {
+    const match = Object.entries(question.boolean_mapping).find(([, mapped]) => mapped === value);
+    normalizedValue = match?.[0] || normalizedValue;
+  }
+
+  const option = question.options?.find((opt: any) => String(opt.value) === normalizedValue);
+  if (!option) return String(value);
+
+  if (question.type === 'rating_1_5') {
+    return `${option.value} - ${option.label}`;
+  }
+  return option.label;
+}
+
+function fieldValue(source: any, column: string | undefined): unknown {
+  if (!source || !column) return undefined;
+  if (column.includes(',')) {
+    const [first, second] = column.split(',').map(part => part.trim());
+    const firstValue = source[first];
+    const secondValue = source[second];
+    if (firstValue === undefined || secondValue === undefined) return undefined;
+    return `${firstValue}, ${secondValue}`;
+  }
+  return source[column];
+}
+
+function formatQuestionValue(details: any, question: any): string {
+  const evaluation = details?.evaluation || {};
+  const table = question.storage_table || 'evaluation_reponses';
+
+  if (table === 'reference') {
+    if (question.code === '1.1') return evaluation.drena?.nom || emptyDisplay;
+    if (question.code === '1.2') return evaluation.iepp?.nom || evaluation.etablissement?.iepp_id || emptyDisplay;
+    return emptyDisplay;
+  }
+
+  if (table === 'etablissements') {
+    return optionLabel(question, fieldValue(evaluation.etablissement, question.storage_column));
+  }
+
+  if (table === 'coges') {
+    return optionLabel(question, fieldValue(evaluation.coges, question.storage_column));
+  }
+
+  if (table === 'evaluations') {
+    if (question.storage_column === 'enqueteur_id') {
+      return evaluation.enqueteur_nom || evaluation.enqueteur_id || emptyDisplay;
+    }
+    return optionLabel(question, fieldValue(evaluation, question.storage_column));
+  }
+
+  if (table === 'recommandations') {
+    return optionLabel(question, fieldValue(details.recommandations, question.storage_column));
+  }
+
+  if (table === 'preuves_documentaires') {
+    const proof = details.preuves?.find((item: any) => item.type_preuve === question.libelle);
+    return optionLabel(question, proof?.statut);
+  }
+
+  const answer = details.reponses?.find((item: any) => item.question_code === question.code);
+  return optionLabel(question, answer?.valeur_numerique ?? answer?.valeur_texte ?? answer?.valeur_date);
+}
+
+function FilledFormViewer({
+  details,
+  onClose,
+  onOpenProof
+}: {
+  details: any;
+  onClose: () => void;
+  onOpenProof: (proof: PreuveDocumentaire) => void;
+}) {
+  const evaluation = details?.evaluation || {};
+
+  return (
+    <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-sm p-4 flex items-center justify-center">
+      <div className="bg-white w-full max-w-6xl max-h-[92vh] rounded-lg border border-slate-200 shadow-2xl flex flex-col overflow-hidden">
+        <div className="px-5 py-4 border-b border-slate-200 bg-[#0F172A] text-white flex items-start justify-between gap-4">
+          <div>
+            <p className="text-[10px] uppercase tracking-wider text-amber-300 font-bold">Formulaire renseigne</p>
+            <h3 className="text-lg font-bold">{evaluation.etablissement?.nom || 'Evaluation EROF'}</h3>
+            <p className="text-xs text-slate-300 font-mono mt-1">ID: {evaluation.id}</p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="bg-white/10 hover:bg-white/20 border border-white/20 text-white text-xs font-bold px-3 py-1.5 rounded transition-colors"
+          >
+            Fermer
+          </button>
+        </div>
+
+        <div className="overflow-y-auto p-5 space-y-5 bg-slate-50">
+          {formSections.map((section: any) => {
+            if (section.num === 16) {
+              const memberQuestions = section.questions || [];
+              return (
+                <section key={section.num} className="bg-white border border-slate-200 rounded-lg overflow-hidden">
+                  <div className="px-4 py-3 border-b border-slate-200 bg-slate-100">
+                    <h4 className="text-sm font-extrabold text-slate-800">{section.num}. {section.titre}</h4>
+                  </div>
+                  <div className="p-4 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+                    {(details.membresBe || []).map((member: any, idx: number) => (
+                      <div key={member.id || idx} className="border border-slate-200 rounded p-3 bg-white">
+                        <p className="text-xs font-bold text-slate-800 mb-2">
+                          {idx + 1}. {member.nom_prenoms || emptyDisplay}
+                        </p>
+                        <div className="space-y-1.5">
+                          {memberQuestions.map((question: any) => (
+                            <div key={question.code} className="flex justify-between gap-3 text-[11px] border-t border-slate-100 pt-1.5">
+                              <span className="text-slate-500">{question.libelle}</span>
+                              <span className="text-slate-800 font-semibold text-right">
+                                {optionLabel(question, fieldValue(member, question.storage_column))}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </section>
+              );
+            }
+
+            if (section.num === 17) {
+              return (
+                <section key={section.num} className="bg-white border border-slate-200 rounded-lg overflow-hidden">
+                  <div className="px-4 py-3 border-b border-slate-200 bg-slate-100">
+                    <h4 className="text-sm font-extrabold text-slate-800">{section.num}. {section.titre}</h4>
+                  </div>
+                  <div className="p-4 grid grid-cols-1 md:grid-cols-2 gap-2">
+                    {(details.preuves || []).map((proof: any, idx: number) => (
+                      <div key={proof.id || idx} className="flex items-start justify-between gap-3 border border-slate-200 rounded p-3 text-xs">
+                        <div>
+                          <p className="font-bold text-slate-800">{idx + 1}. {proof.type_preuve}</p>
+                          {proof.fichier_nom_original && (
+                            <p className="text-[11px] text-emerald-700 font-medium mt-1">
+                              Fichier joint : {proof.fichier_nom_original}
+                            </p>
+                          )}
+                          {proof.commentaire && <p className="text-[11px] text-slate-500 mt-1">{proof.commentaire}</p>}
+                        </div>
+                        <div className="shrink-0 flex flex-col items-end gap-2">
+                          <span className="text-[10px] uppercase font-bold px-2 py-0.5 rounded border border-emerald-200 bg-emerald-50 text-emerald-700">
+                            {optionLabel({ options: section.questions?.[idx]?.options }, proof.statut)}
+                          </span>
+                          {proof.fichier_path && (
+                            <button
+                              type="button"
+                              onClick={() => onOpenProof(proof as PreuveDocumentaire)}
+                              className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-1 rounded bg-[#0F172A] text-white hover:bg-slate-800"
+                            >
+                              <ExternalLink className="h-3 w-3 text-amber-400" />
+                              <span>Voir</span>
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </section>
+              );
+            }
+
+            if (section.num === 20) {
+              return (
+                <section key={section.num} className="bg-white border border-slate-200 rounded-lg overflow-hidden">
+                  <div className="px-4 py-3 border-b border-slate-200 bg-slate-100">
+                    <h4 className="text-sm font-extrabold text-slate-800">{section.num}. {section.titre}</h4>
+                  </div>
+                  <div className="p-4 grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {(details.equipes || []).map((member: any, idx: number) => (
+                      <div key={member.id || idx} className="border border-slate-200 rounded p-3">
+                        <p className="text-xs font-bold text-slate-800">{member.nom_prenoms || emptyDisplay}</p>
+                        <p className="text-[11px] text-slate-500 mt-1">{member.fonction_structure || emptyDisplay}</p>
+                      </div>
+                    ))}
+                  </div>
+                </section>
+              );
+            }
+
+            return (
+              <section key={section.num} className="bg-white border border-slate-200 rounded-lg overflow-hidden">
+                <div className="px-4 py-3 border-b border-slate-200 bg-slate-100">
+                  <h4 className="text-sm font-extrabold text-slate-800">{section.num}. {section.titre}</h4>
+                </div>
+                <div className="p-4 grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {(section.questions || []).map((question: any) => (
+                    <div key={question.code} className={`border border-slate-200 rounded p-3 ${question.type === 'textarea' ? 'md:col-span-2' : ''}`}>
+                      <p className="text-[11px] uppercase tracking-wide font-bold text-slate-400">{question.code}</p>
+                      <p className="text-xs font-semibold text-slate-700 mt-1">{question.libelle}</p>
+                      <p className="text-sm font-bold text-slate-900 mt-2 whitespace-pre-wrap">
+                        {formatQuestionValue(details, question)}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function Dashboard({ currentUser, onEditEvaluation, onNewEvaluation }: DashboardProps) {
   const [evaluations, setEvaluations] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  
+  const canCreateEvaluation = currentUser.role === 'enqueteur' || currentUser.role === 'admin_national';
+  const canEditEvaluation = (evaluation: any) => {
+    return (
+      (currentUser.role === 'admin_national' || currentUser.role === 'enqueteur') &&
+      !evaluation.locked &&
+      (evaluation.statut === 'brouillon' || evaluation.statut === 'en_revision')
+    );
+  };
+
+  // Référentiels DRENA/IEPP (chargés dynamiquement via DataService)
+  const [drenas, setDrenas] = useState<Drena[]>([]);
+  const [iepps, setIepps] = useState<Iepp[]>([]);
+  const [isLoadingReferentiels, setIsLoadingReferentiels] = useState(true);
+  const [referentielError, setReferentielError] = useState<string | null>(null);
+
   // Filters
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedDrena, setSelectedDrena] = useState('');
   const [selectedIepp, setSelectedIepp] = useState('');
   const [selectedStatus, setSelectedStatus] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
   
   // Selected evaluation for details drawer/panel
   const [selectedEvalId, setSelectedEvalId] = useState<string | null>(null);
@@ -54,6 +284,8 @@ export default function Dashboard({ currentUser, onEditEvaluation, onNewEvaluati
   const [supervisionComment, setSupervisionComment] = useState('');
   const [actionSuccess, setActionSuccess] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [showFilledForm, setShowFilledForm] = useState(false);
+  const [fileOpenError, setFileOpenError] = useState<string | null>(null);
 
   // Load evaluations
   const loadEvaluations = async () => {
@@ -72,12 +304,61 @@ export default function Dashboard({ currentUser, onEditEvaluation, onNewEvaluati
     loadEvaluations();
   }, [currentUser]);
 
+  // Load DRENA/IEPP referentials
+  useEffect(() => {
+    const loadReferentiels = async () => {
+      setIsLoadingReferentiels(true);
+      setReferentielError(null);
+      try {
+        const [drenasData, ieppsData] = await Promise.all([
+          DataService.getDrenas(),
+          DataService.getIepps()
+        ]);
+        setDrenas(drenasData);
+        setIepps(ieppsData);
+        if (drenasData.length === 0 || ieppsData.length === 0) {
+          setReferentielError('Aucun référentiel DRENA/IEPP disponible. Veuillez vérifier la configuration Supabase ou les données initiales.');
+        }
+      } catch (err) {
+        console.error(err);
+        setReferentielError('Aucun référentiel DRENA/IEPP disponible. Veuillez vérifier la configuration Supabase ou les données initiales.');
+      } finally {
+        setIsLoadingReferentiels(false);
+      }
+    };
+    loadReferentiels();
+  }, []);
+
+  // Lock the DRENA/IEPP filters to the connected user's own scope. This applies to
+  // anyone rattaché to a DRENA or an IEPP — supervisors (superviseur_drena /
+  // superviseur_iepp) as well as enquêteurs terrain, who self-register at either
+  // level (see Login.tsx registration form).
+  useEffect(() => {
+    if (drenas.length === 0) return;
+    if (currentUser.iepp_id) {
+      const iepp = iepps.find(i => i.id === currentUser.iepp_id);
+      if (iepp) {
+        const drena = drenas.find(d => d.id === iepp.drena_id);
+        if (drena) setSelectedDrena(drena.nom);
+        setSelectedIepp(iepp.nom);
+      }
+    } else if (currentUser.drena_id) {
+      const drena = drenas.find(d => d.id === currentUser.drena_id);
+      if (drena) setSelectedDrena(drena.nom);
+    }
+  }, [drenas, iepps, currentUser]);
+
+  // Users rattachés to a DRENA or IEPP can't widen their filters beyond that scope
+  const isDrenaFilterLocked = !!currentUser.drena_id || !!currentUser.iepp_id;
+  const isIeppFilterLocked = !!currentUser.iepp_id;
+
   // Handle detailed evaluation load
   useEffect(() => {
     if (selectedEvalId) {
       loadDetails(selectedEvalId);
     } else {
       setSelectedDetails(null);
+      setShowFilledForm(false);
     }
   }, [selectedEvalId]);
 
@@ -85,6 +366,7 @@ export default function Dashboard({ currentUser, onEditEvaluation, onNewEvaluati
     setLoadingDetails(true);
     setActionSuccess(null);
     setActionError(null);
+    setFileOpenError(null);
     setSupervisionComment('');
     try {
       const details = await DataService.getEvaluationDetails(id);
@@ -115,6 +397,34 @@ export default function Dashboard({ currentUser, onEditEvaluation, onNewEvaluati
       }
     } catch (err: any) {
       setActionError(err?.message || 'Erreur lors de la mise à jour.');
+    }
+  };
+
+  const handleOpenPreuveFile = async (proof: PreuveDocumentaire) => {
+    setFileOpenError(null);
+    if (!proof.fichier_path) {
+      setFileOpenError('Aucun fichier n\'est associÃ© Ã  cette preuve.');
+      return;
+    }
+
+    const openedWindow = window.open('', '_blank');
+    try {
+      const result = await DataService.getPreuveFileUrl(proof.fichier_path);
+      if (!result.success || !result.url) {
+        openedWindow?.close();
+        setFileOpenError(result.error || 'Impossible d\'ouvrir le document.');
+        return;
+      }
+
+      if (openedWindow) {
+        openedWindow.opener = null;
+        openedWindow.location.href = result.url;
+      } else {
+        window.open(result.url, '_blank', 'noopener,noreferrer');
+      }
+    } catch (err: any) {
+      openedWindow?.close();
+      setFileOpenError(err?.message || 'Impossible d\'ouvrir le document.');
     }
   };
 
@@ -232,6 +542,28 @@ export default function Dashboard({ currentUser, onEditEvaluation, onNewEvaluati
     return matchesSearch && matchesDrena && matchesIepp && matchesStatus;
   });
 
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, selectedDrena, selectedIepp, selectedStatus, evaluations.length]);
+
+  const pageCount = Math.max(1, Math.ceil(filteredEvaluations.length / ROWS_PER_PAGE));
+  const safeCurrentPage = Math.min(currentPage, pageCount);
+  const pageStart = (safeCurrentPage - 1) * ROWS_PER_PAGE;
+  const paginatedEvaluations = filteredEvaluations.slice(pageStart, pageStart + ROWS_PER_PAGE);
+  const pageEnd = Math.min(pageStart + paginatedEvaluations.length, filteredEvaluations.length);
+
+  useEffect(() => {
+    if (currentPage > pageCount) {
+      setCurrentPage(pageCount);
+    }
+  }, [currentPage, pageCount]);
+
+  // IEPP options scoped to the selected DRENA (if any)
+  const selectedDrenaObj = drenas.find(d => d.nom === selectedDrena);
+  const filteredIeppOptions = selectedDrenaObj
+    ? iepps.filter(i => i.drena_id === selectedDrenaObj.id)
+    : iepps;
+
   // Calculate stats
   const totalCount = filteredEvaluations.length;
   const submittedCount = filteredEvaluations.filter(e => e.statut === 'soumis').length;
@@ -244,65 +576,73 @@ export default function Dashboard({ currentUser, onEditEvaluation, onNewEvaluati
   );
 
   return (
-    <div className="space-y-6">
+    <div className="w-full max-w-full mx-auto space-y-6 overflow-x-hidden">
+      {showFilledForm && selectedDetails && (
+        <FilledFormViewer
+          details={selectedDetails}
+          onClose={() => setShowFilledForm(false)}
+          onOpenProof={handleOpenPreuveFile}
+        />
+      )}
+
       {/* Upper Status Banner / Quick Metrics */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4" id="stats-bento">
-        <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm hover:border-slate-300 transition-all flex items-center space-x-4">
-          <div className="p-3 bg-slate-100 text-slate-700 rounded-lg">
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-4 justify-center" id="stats-bento">
+        <div className="min-w-0 bg-white p-5 rounded-xl border border-slate-200 shadow-sm hover:border-slate-300 transition-all flex items-center space-x-4">
+          <div className="shrink-0 p-3 bg-slate-100 text-slate-700 rounded-lg">
             <School className="h-6 w-6" />
           </div>
-          <div>
+          <div className="min-w-0">
             <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Évaluations totales</p>
             <p className="text-2xl font-mono font-bold text-slate-800">{totalCount}</p>
           </div>
         </div>
 
-        <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm hover:border-slate-300 transition-all flex items-center space-x-4">
-          <div className="p-3 bg-slate-100 text-amber-500 rounded-lg">
+        <div className="min-w-0 bg-white p-5 rounded-xl border border-slate-200 shadow-sm hover:border-slate-300 transition-all flex items-center space-x-4">
+          <div className="shrink-0 p-3 bg-slate-100 text-amber-500 rounded-lg">
             <Clock className="h-6 w-6" />
           </div>
-          <div>
+          <div className="min-w-0">
             <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Brouillons / Révisions</p>
             <p className="text-2xl font-mono font-bold text-slate-800">{draftCount}</p>
           </div>
         </div>
 
-        <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm hover:border-slate-300 transition-all flex items-center space-x-4">
-          <div className="p-3 bg-slate-100 text-blue-500 rounded-lg">
+        <div className="min-w-0 bg-white p-5 rounded-xl border border-slate-200 shadow-sm hover:border-slate-300 transition-all flex items-center space-x-4">
+          <div className="shrink-0 p-3 bg-slate-100 text-blue-500 rounded-lg">
             <TrendingUp className="h-6 w-6" />
           </div>
-          <div>
+          <div className="min-w-0">
             <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Soumises à valider</p>
             <p className="text-2xl font-mono font-bold text-slate-800">{submittedCount}</p>
           </div>
         </div>
 
-        <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm hover:border-slate-300 transition-all flex items-center space-x-4">
-          <div className="p-3 bg-slate-100 text-emerald-500 rounded-lg">
+        <div className="min-w-0 bg-white p-5 rounded-xl border border-slate-200 shadow-sm hover:border-slate-300 transition-all flex items-center space-x-4">
+          <div className="shrink-0 p-3 bg-slate-100 text-emerald-500 rounded-lg">
             <CheckCircle className="h-6 w-6" />
           </div>
-          <div>
+          <div className="min-w-0">
             <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Validées & Officielles</p>
             <p className="text-2xl font-mono font-bold text-slate-800">{validatedCount}</p>
           </div>
         </div>
 
-        <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm hover:border-slate-300 transition-all flex items-center space-x-4">
-          <div className="p-3 bg-slate-100 text-[#0F172A] rounded-lg">
+        <div className="min-w-0 bg-white p-5 rounded-xl border border-slate-200 shadow-sm hover:border-slate-300 transition-all flex items-center space-x-4">
+          <div className="shrink-0 p-3 bg-slate-100 text-[#0F172A] rounded-lg">
             <Award className="h-6 w-6" />
           </div>
-          <div>
+          <div className="min-w-0">
             <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Moyenne Nationale</p>
-            <p className="text-2xl font-mono font-bold text-slate-800">{isNaN(averageScore) ? 'N/A' : `${averageScore} / 5`}</p>
+            <p className="text-2xl font-mono font-bold text-slate-800 whitespace-nowrap">{isNaN(averageScore) ? 'N/A' : `${averageScore} / 5`}</p>
           </div>
         </div>
       </div>
 
       {/* Main operational panel divided into table (left/top) and details drawer (right/bottom) */}
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 min-w-0">
         
         {/* Evaluations list - 2 cols on wide, full on mobile */}
-        <div className="xl:col-span-2 bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col">
+        <div className="xl:col-span-2 min-w-0 bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col">
           
           {/* Header & Search */}
           <div className="p-5 border-b border-slate-200 flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -314,7 +654,7 @@ export default function Dashboard({ currentUser, onEditEvaluation, onNewEvaluati
               <p className="text-xs text-slate-500">Gérez, validez et filtrez les formulaires de collecte de terrain</p>
             </div>
 
-            {currentUser.role === 'enqueteur' && (
+            {canCreateEvaluation && (
               <button 
                 id="btn-new-eval"
                 onClick={onNewEvaluation}
@@ -343,12 +683,17 @@ export default function Dashboard({ currentUser, onEditEvaluation, onNewEvaluati
 
             <div>
               <select
-                className="w-full px-2 py-1.5 bg-white border border-slate-200 rounded text-xs focus:ring-1 focus:ring-amber-500 focus:border-amber-500 outline-none font-medium"
+                className="w-full px-2 py-1.5 bg-white border border-slate-200 rounded text-xs focus:ring-1 focus:ring-amber-500 focus:border-amber-500 outline-none font-medium disabled:bg-slate-100 disabled:text-slate-500 disabled:cursor-not-allowed"
                 value={selectedDrena}
-                onChange={(e) => setSelectedDrena(e.target.value)}
+                onChange={(e) => {
+                  setSelectedDrena(e.target.value);
+                  setSelectedIepp('');
+                }}
+                disabled={isLoadingReferentiels || drenas.length === 0 || isDrenaFilterLocked}
+                title={isDrenaFilterLocked ? 'Filtre verrouillé sur votre DRENA de rattachement' : undefined}
               >
                 <option value="">Toutes les DRENA</option>
-                {PRE_SEEDED_DRENAS.map(d => (
+                {drenas.map(d => (
                   <option key={d.id} value={d.nom}>{d.nom}</option>
                 ))}
               </select>
@@ -356,12 +701,14 @@ export default function Dashboard({ currentUser, onEditEvaluation, onNewEvaluati
 
             <div>
               <select
-                className="w-full px-2 py-1.5 bg-white border border-slate-200 rounded text-xs focus:ring-1 focus:ring-amber-500 focus:border-amber-500 outline-none font-medium"
+                className="w-full px-2 py-1.5 bg-white border border-slate-200 rounded text-xs focus:ring-1 focus:ring-amber-500 focus:border-amber-500 outline-none font-medium disabled:bg-slate-100 disabled:text-slate-500 disabled:cursor-not-allowed"
                 value={selectedIepp}
                 onChange={(e) => setSelectedIepp(e.target.value)}
+                disabled={isLoadingReferentiels || filteredIeppOptions.length === 0 || isIeppFilterLocked}
+                title={isIeppFilterLocked ? 'Filtre verrouillé sur votre IEPP de rattachement' : undefined}
               >
                 <option value="">Toutes les IEPP</option>
-                {PRE_SEEDED_IEPPS.map(i => (
+                {filteredIeppOptions.map(i => (
                   <option key={i.id} value={i.nom}>{i.nom}</option>
                 ))}
               </select>
@@ -384,8 +731,22 @@ export default function Dashboard({ currentUser, onEditEvaluation, onNewEvaluati
             </div>
           </div>
 
+          {referentielError && (
+            <div className="px-4 py-2 bg-rose-50 border-b border-rose-200 text-[11px] text-rose-800 font-medium flex items-center gap-1.5">
+              <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-rose-600" />
+              <span>{referentielError}</span>
+            </div>
+          )}
+
+          {canCreateEvaluation && draftCount > 0 && (
+            <div className="px-4 py-2 bg-amber-50 border-b border-amber-200 text-[11px] text-amber-900 font-semibold flex items-center gap-1.5">
+              <Clock className="h-3.5 w-3.5 shrink-0 text-amber-600" />
+              <span>{draftCount} brouillon(s) en cours. Utilisez le crayon pour reprendre, modifier ou finaliser la saisie.</span>
+            </div>
+          )}
+
           {/* Evaluations Table */}
-          <div className="overflow-x-auto flex-1">
+          <div className="overflow-x-auto xl:overflow-x-hidden flex-1">
             {loading ? (
               <div className="p-12 text-center flex flex-col items-center justify-center space-y-3">
                 <RefreshCw className="h-8 w-8 text-amber-500 animate-spin" />
@@ -396,18 +757,26 @@ export default function Dashboard({ currentUser, onEditEvaluation, onNewEvaluati
                 Aucune évaluation ne correspond à vos critères de recherche ou à votre rôle.
               </div>
             ) : (
-              <table className="min-w-full divide-y divide-slate-200">
+              <>
+              <table className="w-full table-fixed divide-y divide-slate-200">
+                <colgroup>
+                  <col style={{ width: '36%' }} />
+                  <col style={{ width: '17%' }} />
+                  <col style={{ width: '15%' }} />
+                  <col style={{ width: '20%' }} />
+                  <col style={{ width: '12%' }} />
+                </colgroup>
                 <thead className="bg-[#0F172A] text-slate-200">
                   <tr>
-                    <th className="px-5 py-3 text-left text-[11px] font-bold uppercase tracking-wider">Identifiant / Établissement</th>
-                    <th className="px-5 py-3 text-left text-[11px] font-bold uppercase tracking-wider">Localisation</th>
-                    <th className="px-5 py-3 text-left text-[11px] font-bold uppercase tracking-wider">Statut</th>
-                    <th className="px-5 py-3 text-left text-[11px] font-bold uppercase tracking-wider">Score / Éval</th>
-                    <th className="px-5 py-3 text-right text-[11px] font-bold uppercase tracking-wider">Actions</th>
+                    <th className="px-3 py-3 text-center text-[11px] font-bold uppercase tracking-wider">Identifiant / Établissement</th>
+                    <th className="px-3 py-3 text-center text-[11px] font-bold uppercase tracking-wider">Localisation</th>
+                    <th className="px-3 py-3 text-center text-[11px] font-bold uppercase tracking-wider">Statut</th>
+                    <th className="px-3 py-3 text-center text-[11px] font-bold uppercase tracking-wider">Score / Éval</th>
+                    <th className="px-3 py-3 text-center text-[11px] font-bold uppercase tracking-wider">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-slate-100">
-                  {filteredEvaluations.map((ev) => {
+                  {paginatedEvaluations.map((ev) => {
                     const statusConfig = {
                       brouillon: { bg: 'bg-slate-100', text: 'text-slate-700', border: 'border-slate-200', label: 'Brouillon' },
                       soumis: { bg: 'bg-blue-100', text: 'text-blue-700', border: 'border-blue-200', label: 'Soumis' },
@@ -418,6 +787,10 @@ export default function Dashboard({ currentUser, onEditEvaluation, onNewEvaluati
                     }[ev.statut as EvaluationStatus] || { bg: 'bg-slate-100', text: 'text-slate-700', border: 'border-slate-200', label: ev.statut };
 
                     const isSelected = selectedEvalId === ev.id;
+                    const isEditable = canEditEvaluation(ev);
+                    const editLabel = currentUser.role === 'admin_national'
+                      ? 'Modifier le brouillon'
+                      : 'Reprendre et finaliser le brouillon';
 
                     return (
                       <tr 
@@ -425,55 +798,56 @@ export default function Dashboard({ currentUser, onEditEvaluation, onNewEvaluati
                         onClick={() => setSelectedEvalId(ev.id)}
                         className={`hover:bg-slate-50 cursor-pointer transition-all ${isSelected ? 'bg-amber-50/50 border-l-4 border-l-amber-500 font-medium' : ''}`}
                       >
-                        <td className="px-5 py-4 whitespace-nowrap">
-                          <div className="flex items-center space-x-3">
-                            <div className="p-2 bg-slate-100 text-slate-700 rounded">
+                        <td className="px-3 py-4">
+                          <div className="flex items-center space-x-3 min-w-0">
+                            <div className="p-2 bg-slate-100 text-slate-700 rounded shrink-0">
                               <School className="h-4 w-4" />
                             </div>
-                            <div>
-                              <div className="text-sm font-semibold text-slate-800">{ev.etablissement_nom || 'École inconnue'}</div>
+                            <div className="min-w-0">
+                              <div className="text-sm font-semibold text-slate-800 truncate">{ev.etablissement_nom || 'École inconnue'}</div>
                               <div className="text-[11px] font-mono text-slate-400">ID: {ev.id.substring(0, 13)}...</div>
                             </div>
                           </div>
                         </td>
-                        <td className="px-5 py-4 whitespace-nowrap">
-                          <div className="text-xs font-semibold text-slate-600">{ev.drena_nom || 'DRENA N/A'}</div>
-                          <div className="text-[10px] text-slate-400 font-medium">{ev.iepp_nom || 'IEPP N/A'}</div>
+                        <td className="px-3 py-4">
+                          <div className="text-xs font-semibold text-slate-600 truncate">{ev.drena_nom || 'DRENA N/A'}</div>
+                          <div className="text-[10px] text-slate-400 font-medium truncate">{ev.iepp_nom || 'IEPP N/A'}</div>
                         </td>
-                        <td className="px-5 py-4 whitespace-nowrap">
-                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded text-[11px] font-bold uppercase tracking-wider border ${statusConfig.bg} ${statusConfig.text} ${statusConfig.border}`}>
+                        <td className="px-3 py-4">
+                          <span className={`inline-flex max-w-full items-center px-2 py-0.5 rounded text-[11px] font-bold uppercase tracking-wider border ${statusConfig.bg} ${statusConfig.text} ${statusConfig.border}`}>
                             <span className="h-1.5 w-1.5 rounded-full bg-current mr-1.5"></span>
-                            {statusConfig.label}
+                            <span className="truncate">{statusConfig.label}</span>
                           </span>
                         </td>
-                        <td className="px-5 py-4 whitespace-nowrap">
+                        <td className="px-3 py-4">
                           {ev.score_global ? (
-                            <div>
+                            <div className="min-w-0">
                               <div className="text-sm font-mono font-bold text-slate-800">{ev.score_global} / 5</div>
-                              <div className="text-[9px] text-slate-400 tracking-tight font-bold uppercase">{ev.classification}</div>
+                              <div className="text-[9px] text-slate-400 tracking-tight font-bold uppercase truncate">{ev.classification}</div>
                             </div>
                           ) : (
                             <span className="text-xs text-slate-400 italic">Non calculé (brouillon)</span>
                           )}
                         </td>
-                        <td className="px-5 py-4 whitespace-nowrap text-right text-sm font-medium" onClick={(e) => e.stopPropagation()}>
-                          <div className="flex items-center justify-end space-x-2">
+                        <td className="px-3 py-4 text-center text-sm font-medium" onClick={(e) => e.stopPropagation()}>
+                          <div className="flex items-center justify-center gap-2 whitespace-nowrap">
                             <button 
                               onClick={() => setSelectedEvalId(ev.id)}
-                              className="p-1.5 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded transition-colors border border-slate-200 bg-white shadow-sm"
+                              className="shrink-0 p-1.5 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded transition-colors border border-slate-200 bg-white shadow-sm"
                               title="Consulter le rapport"
                             >
                               <Eye className="h-4 w-4" />
                             </button>
                             
-                            {/* Edit draft (Enqueteur only & modifiable states) */}
-                            {currentUser.role === 'enqueteur' && (ev.statut === 'brouillon' || ev.statut === 'en_revision') && (
+                            {isEditable && (
                               <button 
                                 onClick={() => onEditEvaluation(ev.id)}
-                                className="p-1.5 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded transition-colors border border-blue-200 bg-white shadow-sm"
-                                title="Modifier le brouillon"
+                                className="shrink-0 p-1.5 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded transition-colors border border-blue-200 bg-white shadow-sm"
+                                title={editLabel}
+                                aria-label={editLabel}
                               >
                                 <Edit className="h-4 w-4" />
+                                <span className="sr-only">{editLabel}</span>
                               </button>
                             )}
                           </div>
@@ -483,12 +857,49 @@ export default function Dashboard({ currentUser, onEditEvaluation, onNewEvaluati
                   })}
                 </tbody>
               </table>
+              <div className="border-t border-slate-200 bg-white px-4 py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <p className="text-[11px] font-semibold text-slate-500">
+                  Affichage {filteredEvaluations.length === 0 ? 0 : pageStart + 1}-{pageEnd} sur {filteredEvaluations.length} · 10 lignes par page
+                </p>
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setCurrentPage(page => Math.max(1, page - 1))}
+                    disabled={safeCurrentPage <= 1}
+                    className="px-2.5 py-1.5 rounded border border-slate-200 text-[11px] font-bold text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    Précédent
+                  </button>
+                  <input
+                    type="range"
+                    min="1"
+                    max={pageCount}
+                    value={safeCurrentPage}
+                    onChange={(e) => setCurrentPage(Number(e.target.value))}
+                    disabled={pageCount <= 1}
+                    className="w-36 accent-amber-500 disabled:opacity-40"
+                    aria-label="Navigation des pages du tableau"
+                  />
+                  <span className="min-w-14 text-center text-[11px] font-bold text-slate-600">
+                    {safeCurrentPage} / {pageCount}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setCurrentPage(page => Math.min(pageCount, page + 1))}
+                    disabled={safeCurrentPage >= pageCount}
+                    className="px-2.5 py-1.5 rounded border border-slate-200 text-[11px] font-bold text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    Suivant
+                  </button>
+                </div>
+              </div>
+              </>
             )}
           </div>
         </div>
 
         {/* Detailed reports drawer - 1 col on wide */}
-        <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6 flex flex-col min-h-[500px]">
+        <div className="min-w-0 bg-white rounded-xl border border-slate-200 shadow-sm p-6 flex flex-col min-h-[500px]">
           {!selectedEvalId ? (
             <div className="flex-1 flex flex-col items-center justify-center text-center p-6 text-slate-400 space-y-4">
               <FileText className="h-12 w-12 text-slate-200" />
@@ -538,12 +949,14 @@ export default function Dashboard({ currentUser, onEditEvaluation, onNewEvaluati
                 </div>
 
                 {/* SUPERVISOR ACTION MODULES */}
-                {/* RLS limits validation to superviseur_drena, superviseur_iepp and admin_national on submitted state */}
-                {['admin_national', 'superviseur_drena', 'superviseur_iepp'].includes(currentUser.role) && 
-                 ['soumis', 'en_revision', 'brouillon'].includes(selectedDetails.evaluation.statut) && (
+                {/* Submissions are now auto-validated when they pass all compliance checks (see submitEvaluation),
+                    so a supervisor's role here is a post-hoc veto (reject / send back to revision) rather than
+                    an initial gate. "Valider" stays available only while the record hasn't been auto-validated yet. */}
+                {['admin_national', 'superviseur_drena', 'superviseur_iepp'].includes(currentUser.role) &&
+                 ['soumis', 'en_revision', 'brouillon', 'valide'].includes(selectedDetails.evaluation.statut) && (
                   <div className="space-y-3 pt-2 border-t border-slate-200">
                     <p className="text-xs font-bold text-slate-700 uppercase tracking-wider">Actions de supervision</p>
-                    
+
                     <textarea
                       placeholder="Commentaire ou motif (requis pour rejet ou renvoi en révision)..."
                       className="w-full p-2 bg-white border border-slate-200 rounded text-xs outline-none focus:ring-1 focus:ring-amber-500 h-16"
@@ -551,13 +964,15 @@ export default function Dashboard({ currentUser, onEditEvaluation, onNewEvaluati
                       onChange={(e) => setSupervisionComment(e.target.value)}
                     />
 
-                    <div className="grid grid-cols-3 gap-2">
-                      <button
-                        onClick={() => handleStatusChange('valide')}
-                        className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-1.5 px-2 rounded text-[10px] uppercase tracking-wider transition-colors shadow-sm"
-                      >
-                        Valider
-                      </button>
+                    <div className={`grid gap-2 ${selectedDetails.evaluation.statut === 'valide' ? 'grid-cols-2' : 'grid-cols-3'}`}>
+                      {selectedDetails.evaluation.statut !== 'valide' && (
+                        <button
+                          onClick={() => handleStatusChange('valide')}
+                          className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-1.5 px-2 rounded text-[10px] uppercase tracking-wider transition-colors shadow-sm"
+                        >
+                          Valider
+                        </button>
+                      )}
                       <button
                         onClick={() => {
                           if (!supervisionComment.trim()) {
@@ -607,6 +1022,12 @@ export default function Dashboard({ currentUser, onEditEvaluation, onNewEvaluati
                   <div className="p-2 bg-rose-50 border border-rose-200 rounded text-[11px] text-rose-800 font-medium flex items-center space-x-1">
                     <AlertTriangle className="h-4 w-4 shrink-0 text-rose-600" />
                     <span>{actionError}</span>
+                  </div>
+                )}
+                {fileOpenError && (
+                  <div className="p-2 bg-rose-50 border border-rose-200 rounded text-[11px] text-rose-800 font-medium flex items-center space-x-1">
+                    <AlertTriangle className="h-4 w-4 shrink-0 text-rose-600" />
+                    <span>{fileOpenError}</span>
                   </div>
                 )}
               </div>
@@ -707,13 +1128,15 @@ export default function Dashboard({ currentUser, onEditEvaluation, onNewEvaluati
                           <p className="font-semibold text-slate-800">{mb.nom_prenoms}</p>
                           <p className="text-[10px] text-slate-400 capitalize">{mb.fonction.replace('_', ' ')} • {mb.genre}</p>
                         </div>
-                        <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase ${
+                        <div className="shrink-0 flex items-center gap-1.5">
+                          <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase ${
                           mb.maitrise_role === 'bonne' ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' :
                           mb.maitrise_role === 'moyenne' ? 'bg-amber-100 text-amber-800 border border-amber-200' :
                           'bg-rose-100 text-rose-800 border border-rose-200'
                         }`}>
                           rôle: {mb.maitrise_role}
-                        </span>
+                          </span>
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -726,15 +1149,35 @@ export default function Dashboard({ currentUser, onEditEvaluation, onNewEvaluati
                   <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider">Preuves documentaires auditées</h4>
                   <div className="space-y-1.5 max-h-[150px] overflow-y-auto pr-1">
                     {selectedDetails.preuves.map((pr: any) => (
-                      <div key={pr.id} className="flex justify-between items-center text-[11px] p-2 bg-slate-50 rounded border border-slate-200">
-                        <span className="truncate max-w-[180px] font-semibold text-slate-700">{pr.type_preuve}</span>
-                        <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase ${
+                      <div key={pr.id} className="flex justify-between items-center gap-2 text-[11px] p-2 bg-slate-50 rounded border border-slate-200">
+                        <div className="min-w-0">
+                          <p className="truncate max-w-[180px] font-semibold text-slate-700">{pr.type_preuve}</p>
+                          {pr.fichier_nom_original && (
+                            <p className="truncate max-w-[180px] text-[10px] text-emerald-700 font-medium">
+                              {pr.fichier_nom_original}
+                            </p>
+                          )}
+                        </div>
+                        <div className="shrink-0 flex items-center gap-1.5">
+                          <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase ${
                           pr.statut === 'disponible_consultee' ? 'bg-emerald-100 text-emerald-700' :
                           pr.statut === 'declaree_non_presentee' ? 'bg-amber-100 text-amber-800' :
                           'bg-rose-100 text-rose-800'
                         }`}>
                           {pr.statut === 'disponible_consultee' ? 'Disponible' : pr.statut === 'declaree_non_presentee' ? 'Déclarée' : 'Manquant'}
-                        </span>
+                          </span>
+                          {pr.fichier_path && (
+                            <button
+                              type="button"
+                              onClick={() => handleOpenPreuveFile(pr)}
+                              className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-[#0F172A] hover:bg-slate-800 text-white text-[9px] font-bold uppercase"
+                              title={`Consulter ${pr.fichier_nom_original || pr.type_preuve}`}
+                            >
+                              <ExternalLink className="h-3 w-3 text-amber-400" />
+                              <span>Voir</span>
+                            </button>
+                          )}
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -742,7 +1185,14 @@ export default function Dashboard({ currentUser, onEditEvaluation, onNewEvaluati
               )}
 
               {/* GLOBAL EXPORTS FROM DETAILS DRAWER */}
-              <div className="border-t border-slate-200 pt-4 mt-auto grid grid-cols-2 gap-2">
+              <div className="border-t border-slate-200 pt-4 mt-auto grid grid-cols-3 gap-2">
+                <button
+                  onClick={() => setShowFilledForm(true)}
+                  className="bg-[#0F172A] hover:bg-slate-800 text-white font-bold py-2 px-3 rounded border border-slate-800 text-xs transition-colors flex items-center justify-center space-x-1.5 shadow-sm"
+                >
+                  <Eye className="h-3 w-3 text-amber-400" />
+                  <span>Formulaire</span>
+                </button>
                 <button
                   onClick={() => handleExportCSV('raw')}
                   className="bg-white hover:bg-slate-50 text-slate-700 font-bold py-2 px-3 rounded border border-slate-200 text-xs transition-colors flex items-center justify-center space-x-1.5 shadow-sm"

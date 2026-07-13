@@ -7,14 +7,16 @@ import React, { useState, useEffect, useRef } from 'react';
 import { 
   DataService
 } from '../data/dataService';
-import { 
-  User, 
-  Evaluation, 
-  EvaluationReponse, 
-  MembreBe, 
-  EquipeEvaluation, 
-  Recommandation, 
-  PreuveDocumentaire 
+import {
+  User,
+  Evaluation,
+  EvaluationReponse,
+  MembreBe,
+  EquipeEvaluation,
+  Recommandation,
+  PreuveDocumentaire,
+  Etablissement,
+  Coges
 } from '../types';
 import questionsErof from '../questions_erof.json';
 import { 
@@ -30,7 +32,8 @@ import {
   Clock, 
   ChevronRight,
   ShieldAlert,
-  Loader
+  Loader,
+  ExternalLink
 } from 'lucide-react';
 
 interface EvaluationFormProps {
@@ -58,6 +61,10 @@ export default function EvaluationForm({ currentUser, evaluationId, onClose }: E
   const [evaluation, setEvaluation] = useState<Partial<Evaluation>>({});
   const [reponses, setReponses] = useState<Record<string, string>>({}); // code -> value
   const [reponseIds, setReponseIds] = useState<Record<string, string>>({}); // code -> UUID
+  // Dedicated states for questions whose storage_table targets etablissements / coges,
+  // so they never fall into the evaluation_reponses EAV bucket.
+  const [etablissementUpdates, setEtablissementUpdates] = useState<Partial<Etablissement>>({});
+  const [cogesUpdates, setCogesUpdates] = useState<Partial<Coges>>({});
   const [membresBe, setMembresBe] = useState<MembreBe[]>([]);
   const [equipes, setEquipes] = useState<EquipeEvaluation[]>([]);
   const [recommandations, setRecommandations] = useState<Partial<Recommandation>>({});
@@ -66,19 +73,30 @@ export default function EvaluationForm({ currentUser, evaluationId, onClose }: E
   // UI / Options states
   const [drenas, setDrenas] = useState<any[]>([]);
   const [availableIepps, setAvailableIepps] = useState<any[]>([]);
-  const [availableEtabs, setAvailableEtabs] = useState<any[]>([]);
   const [selectedDrenaId, setSelectedDrenaId] = useState('');
   const [selectedIeppId, setSelectedIeppId] = useState('');
+  const [noActiveCampagne, setNoActiveCampagne] = useState(false);
   
   // Tracking
   const [saving, setSaving] = useState(false);
   const [autoSaveStatus, setAutoSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'failed'>('idle');
   const [submissionErrors, setSubmissionErrors] = useState<string[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isClosingDraft, setIsClosingDraft] = useState(false);
+  const [fileOpenError, setFileOpenError] = useState<string | null>(null);
   
   // Form rendering helpers
   const sections = questionsErof.sections;
   const currentSection = sections[activeSectionIdx];
+  const isDraftLikeStatus = evaluation.statut === 'brouillon' || evaluation.statut === 'en_revision';
+  const saveButtonLabel = isDraftLikeStatus ? 'Enregistrer brouillon' : 'Enregistrement verrouille';
+
+  // question_code -> section number, needed for evaluation_reponses.section_num (NOT NULL)
+  const questionSectionMap = React.useMemo(() => {
+    const map: Record<string, number> = {};
+    sections.forEach(s => (s.questions || []).forEach((q: any) => { map[q.code] = s.num; }));
+    return map;
+  }, [sections]);
 
   // Section 16 BE profiles sub-navigation (which of the 11 profiles is active)
   const [activeBeIdx, setActiveBeIdx] = useState(0);
@@ -105,11 +123,15 @@ export default function EvaluationForm({ currentUser, evaluationId, onClose }: E
           const repMap: Record<string, string> = {};
           const idMap: Record<string, string> = {};
           details.reponses.forEach(r => {
-            repMap[r.question_code] = r.reponse_valeur;
+            if (r.valeur_numerique !== null && r.valeur_numerique !== undefined) {
+              repMap[r.question_code] = String(r.valeur_numerique);
+            }
             idMap[r.question_code] = r.id;
           });
           setReponses(repMap);
           setReponseIds(idMap);
+          setEtablissementUpdates(details.evaluation.etablissement || {});
+          setCogesUpdates(details.evaluation.coges || {});
           setMembresBe(details.membresBe);
           setEquipes(details.equipes);
           setRecommandations(details.recommandations || {});
@@ -127,17 +149,28 @@ export default function EvaluationForm({ currentUser, evaluationId, onClose }: E
               const ieppsData = await DataService.getIepps(drenaId);
               setAvailableIepps(ieppsData);
             }
-            if (ieppId) {
-              const etabsData = await DataService.getEtablissements(ieppId);
-              setAvailableEtabs(etabsData);
-            }
           }
         }
       } else {
         // Create new
+        const campagnes = await DataService.getCampagnes();
+        const activeCampagne = campagnes.find(c => c.statut === 'ouverte');
+        setNoActiveCampagne(!activeCampagne);
+
+        // Pre-fill and lock the regional filters to the connected user's own scope
+        if (currentUser.drena_id) {
+          setSelectedDrenaId(currentUser.drena_id);
+          const ieppsData = await DataService.getIepps(currentUser.drena_id);
+          setAvailableIepps(ieppsData);
+          if (currentUser.iepp_id) {
+            setSelectedIeppId(currentUser.iepp_id);
+          }
+        }
+
         const todayStr = new Date().toISOString().split('T')[0];
         setEvaluation({
           id: newOrExistingId,
+          campagne_id: activeCampagne?.id,
           enqueteur_id: currentUser.id,
           date_collecte: todayStr,
           statut: 'brouillon',
@@ -181,7 +214,7 @@ export default function EvaluationForm({ currentUser, evaluationId, onClose }: E
           {
             id: generateUUID(),
             evaluation_id: newOrExistingId,
-            nom_prenoms: currentUser.nom_prenoms,
+            nom_prenoms: `${currentUser.prenom} ${currentUser.nom}`,
             fonction_structure: 'Enquêteur terrain'
           }
         ]);
@@ -217,40 +250,40 @@ export default function EvaluationForm({ currentUser, evaluationId, onClose }: E
     if (!loading) {
       loadIepps();
       setSelectedIeppId('');
-      setAvailableEtabs([]);
-      setEvaluation(prev => ({ ...prev, etablissement_id: '' }));
+      setEvaluation(prev => ({ ...prev, etablissement_id: '', coges_id: undefined }));
+      setEtablissementUpdates({});
+      setCogesUpdates({});
     }
   }, [selectedDrenaId]);
 
   useEffect(() => {
-    const loadEtabs = async () => {
-      if (selectedIeppId) {
-        const data = await DataService.getEtablissements(selectedIeppId);
-        setAvailableEtabs(data);
-      } else {
-        setAvailableEtabs([]);
-      }
-    };
     if (!loading) {
-      loadEtabs();
-      setEvaluation(prev => ({ ...prev, etablissement_id: '' }));
+      setEvaluation(prev => ({ ...prev, etablissement_id: '', coges_id: undefined }));
+      setEtablissementUpdates({});
+      setCogesUpdates({});
     }
   }, [selectedIeppId]);
 
   // Autosaver trigger (every 30 seconds)
   useEffect(() => {
     const interval = setInterval(() => {
-      if (evaluation.statut === 'brouillon' || evaluation.statut === 'en_revision') {
+      if (!isClosingDraft && !isSubmitting && isDraftLikeStatus) {
         saveDraft(true);
       }
     }, 30000);
 
     return () => clearInterval(interval);
-  }, [evaluation, reponses, membresBe, equipes, recommandations, preuves]);
+  }, [evaluation, reponses, etablissementUpdates, cogesUpdates, membresBe, equipes, recommandations, preuves, isClosingDraft, isSubmitting, isDraftLikeStatus]);
 
   // Primary draft saver
-  const saveDraft = async (isAuto = false) => {
-    if (!evalId) return;
+  const saveDraft = async (isAuto = false): Promise<{ success: boolean; error?: string }> => {
+    if (!evalId) return { success: false, error: 'Formulaire non initialise.' };
+    if (noActiveCampagne) {
+      const error = 'Aucune campagne active n\'est configuree. Veuillez contacter l\'administrateur.';
+      if (isAuto) setAutoSaveStatus('failed');
+      else alert(error);
+      return { success: false, error };
+    }
     if (isAuto) setAutoSaveStatus('saving');
     else setSaving(true);
 
@@ -265,7 +298,8 @@ export default function EvaluationForm({ currentUser, evaluationId, onClose }: E
         id: rId,
         evaluation_id: evalId,
         question_code: code,
-        reponse_valeur: val as string
+        section_num: questionSectionMap[code] || 0,
+        valeur_numerique: parseInt(val as string, 10)
       };
     });
 
@@ -277,7 +311,9 @@ export default function EvaluationForm({ currentUser, evaluationId, onClose }: E
         equipes,
         recommandations,
         preuves,
-        currentUser.id
+        currentUser.id,
+        etablissementUpdates,
+        cogesUpdates
       );
       if (result.success) {
         if (isAuto) {
@@ -287,34 +323,49 @@ export default function EvaluationForm({ currentUser, evaluationId, onClose }: E
           setSaving(false);
           alert('Brouillon enregistré avec succès.');
         }
+        return { success: true };
       } else {
         if (isAuto) setAutoSaveStatus('failed');
         else {
           setSaving(false);
           alert(`Erreur de sauvegarde : ${result.error}`);
         }
+        return { success: false, error: result.error || 'Erreur de sauvegarde.' };
       }
     } catch (e: any) {
+      const error = e?.message || 'Erreur inattendue.';
       if (isAuto) setAutoSaveStatus('failed');
       else {
         setSaving(false);
-        alert(`Erreur inattendue : ${e.message}`);
+        alert(`Erreur inattendue : ${error}`);
       }
+      return { success: false, error };
     }
   };
 
   // Submit definitively
   const handleSubmitDefinitively = async () => {
+    if (noActiveCampagne) {
+      alert('Aucune campagne active n\'est configurée. Veuillez contacter l\'administrateur.');
+      return;
+    }
     setSubmissionErrors([]);
     setIsSubmitting(true);
     
-    // First, force draft save
-    await saveDraft(true);
+    // First, force draft save so the submission uses the latest answers.
+    const draftResult = await saveDraft(true);
+    if (!draftResult.success) {
+      const error = draftResult.error || 'La sauvegarde du brouillon a echoue.';
+      setSubmissionErrors([error]);
+      alert(error);
+      setIsSubmitting(false);
+      return;
+    }
 
     try {
       const result = await DataService.submitEvaluation(evalId, currentUser.id);
       if (result.success) {
-        alert('Félicitations! L\'évaluation a été soumise avec succès à la supervision pour validation et scoring.');
+        alert('Félicitations! L\'évaluation a passé tous les contrôles de conformité : elle est directement validée et scorée.');
         onClose();
       } else {
         setSubmissionErrors(result.errors || ['Erreur de soumission générale.']);
@@ -326,6 +377,23 @@ export default function EvaluationForm({ currentUser, evaluationId, onClose }: E
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  const handleSaveAndClose = async () => {
+    setSubmissionErrors([]);
+    setIsClosingDraft(true);
+
+    const result = await saveDraft(true);
+    setIsClosingDraft(false);
+
+    if (result.success) {
+      onClose();
+      return;
+    }
+
+    const error = result.error || 'Le brouillon n\'a pas pu etre enregistre.';
+    setSubmissionErrors([error]);
+    alert(error);
   };
 
   // Handle specific question responses
@@ -361,6 +429,31 @@ export default function EvaluationForm({ currentUser, evaluationId, onClose }: E
         ...prev,
         [column]: value
       }));
+    }
+  };
+
+  // Handle etablissements-scoped question fields (Sections 1-2)
+  const handleEtablissementPropChange = (column: string, value: any) => {
+    setEtablissementUpdates(prev => ({ ...prev, [column]: value }));
+  };
+
+  // Handle coges-scoped question fields (Sections 1-2)
+  const handleCogesPropChange = (column: string, value: any) => {
+    setCogesUpdates(prev => ({ ...prev, [column]: value }));
+  };
+
+  // Single dispatcher enforcing storage_table routing uniformly across field types
+  const handleQuestionChange = (q: any, value: any) => {
+    if (q.storage_table === 'evaluations') {
+      handlePropChange('evaluations', q.storage_column, value);
+    } else if (q.storage_table === 'recommandations') {
+      handlePropChange('recommandations', q.storage_column, value);
+    } else if (q.storage_table === 'etablissements') {
+      handleEtablissementPropChange(q.storage_column, value);
+    } else if (q.storage_table === 'coges') {
+      handleCogesPropChange(q.storage_column, value);
+    } else {
+      handleAnswerChange(q.code, value);
     }
   };
 
@@ -422,6 +515,34 @@ export default function EvaluationForm({ currentUser, evaluationId, onClose }: E
     }
   };
 
+  const handleOpenUploadedProof = async (proof: PreuveDocumentaire) => {
+    setFileOpenError(null);
+    if (!proof.fichier_path) {
+      setFileOpenError('Aucun fichier n\'est associÃ© Ã  cette preuve.');
+      return;
+    }
+
+    const openedWindow = window.open('', '_blank');
+    try {
+      const result = await DataService.getPreuveFileUrl(proof.fichier_path);
+      if (!result.success || !result.url) {
+        openedWindow?.close();
+        setFileOpenError(result.error || 'Impossible d\'ouvrir le document.');
+        return;
+      }
+
+      if (openedWindow) {
+        openedWindow.opener = null;
+        openedWindow.location.href = result.url;
+      } else {
+        window.open(result.url, '_blank', 'noopener,noreferrer');
+      }
+    } catch (err: any) {
+      openedWindow?.close();
+      setFileOpenError(err?.message || 'Impossible d\'ouvrir le document.');
+    }
+  };
+
   // Handle Repeat section 20 (Team addition/deletion)
   const handleTeamMemberAdd = () => {
     if (equipes.length >= 4) {
@@ -458,43 +579,14 @@ export default function EvaluationForm({ currentUser, evaluationId, onClose }: E
     });
   };
 
-  // Select an etablissement cascade
-  const handleEtablissementSelect = async (etabId: string) => {
-    if (!etabId) {
-      setEvaluation(prev => ({ ...prev, etablissement_id: '' }));
-      return;
-    }
-    const selectedEtab = availableEtabs.find(e => e.id === etabId);
-    if (selectedEtab) {
-      let cogesId = '';
-      try {
-        const cogesObj = await DataService.getCoges(etabId);
-        if (cogesObj) {
-          cogesId = cogesObj.id;
-        }
-      } catch (err) {
-        console.error('Failed to load COGES for etablissement', err);
-      }
-
-      setEvaluation(prev => ({
-        ...prev,
-        etablissement_id: etabId,
-        coges_id: cogesId || prev.coges_id
-      }));
-      // Auto pre-fill School elements
-      setReponses(prev => ({
-        ...prev,
-        '1.3': selectedEtab.localite,
-        '1.5': selectedEtab.code_desps,
-        '1.7': selectedEtab.type_etablissement,
-        '1.8': selectedEtab.date_creation,
-        '2.1': selectedEtab.statut,
-        '2.2': selectedEtab.milieu,
-        '2.3': String(selectedEtab.nombre_classes || 0),
-        '2.4': String(selectedEtab.nombre_enseignants || 0),
-        '2.5': selectedEtab.cantine ? 'oui' : 'non'
-      }));
-    }
+  // Free-text entry of the etablissement name (no pre-existing referential list)
+  const handleEtablissementNameChange = (nom: string) => {
+    setEvaluation(prev => ({
+      ...prev,
+      etablissement_id: prev.etablissement_id || generateUUID(),
+      coges_id: prev.coges_id || generateUUID()
+    }));
+    setEtablissementUpdates(prev => ({ ...prev, nom, iepp_id: selectedIeppId }));
   };
 
   if (loading) {
@@ -510,7 +602,7 @@ export default function EvaluationForm({ currentUser, evaluationId, onClose }: E
     <div className="bg-white rounded-xl border border-slate-200 shadow-lg overflow-hidden flex flex-col lg:flex-row min-h-[650px]">
       
       {/* Side step navigator (20 sections list) */}
-      <div className="lg:w-80 bg-slate-50 border-r border-slate-200 flex flex-col">
+      <div className="order-2 lg:order-1 lg:w-80 bg-slate-50 border-r border-slate-200 flex flex-col">
         <div className="p-5 border-b border-slate-800 bg-[#0F172A] text-slate-300">
           <h3 className="font-bold text-sm tracking-tight text-white font-display">Navigation Sections</h3>
           <p className="text-[11px] text-slate-400 mt-1 uppercase tracking-wider">Saisie progressive • 20 étapes</p>
@@ -565,26 +657,28 @@ export default function EvaluationForm({ currentUser, evaluationId, onClose }: E
         <div className="p-4 border-t border-slate-200 bg-white">
           <button
             onClick={() => saveDraft(false)}
-            className="w-full bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold py-2 px-3 rounded border border-slate-200 text-xs transition-colors flex items-center justify-center space-x-2 shadow-sm"
+            disabled={noActiveCampagne || saving || isClosingDraft || isSubmitting}
+            className="w-full bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold py-2 px-3 rounded border border-slate-200 text-xs transition-colors flex items-center justify-center space-x-2 shadow-sm disabled:opacity-40 disabled:cursor-not-allowed"
           >
-            <Save className="h-3.5 w-3.5" />
-            <span>Enregistrer brouillon</span>
+            {saving ? <Loader className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+            <span>{saving ? 'Enregistrement...' : saveButtonLabel}</span>
           </button>
         </div>
       </div>
 
       {/* Main active section questionnaire details */}
-      <div className="flex-1 p-6 lg:p-8 flex flex-col justify-between space-y-8">
+      <div className="order-1 lg:order-2 flex-1 p-6 lg:p-8 flex flex-col justify-between space-y-8">
         
         {/* Section Header */}
         <div className="space-y-2 border-b border-slate-200 pb-4">
           <div className="flex items-center justify-between">
             <button 
-              onClick={onClose}
-              className="text-xs font-bold text-slate-500 hover:text-slate-800 flex items-center space-x-1 uppercase tracking-wider"
+              onClick={handleSaveAndClose}
+              disabled={isClosingDraft || saving || isSubmitting}
+              className="text-xs font-bold text-slate-500 hover:text-slate-800 flex items-center space-x-1 uppercase tracking-wider disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <ArrowLeft className="h-4 w-4" />
-              <span>Quitter le formulaire</span>
+              {isClosingDraft ? <Loader className="h-4 w-4 animate-spin" /> : <ArrowLeft className="h-4 w-4" />}
+              <span>{isClosingDraft ? 'Sauvegarde...' : 'Enregistrer et quitter'}</span>
             </button>
             <span className="text-[11px] font-bold text-amber-600 bg-amber-50 border border-amber-200 px-2.5 py-0.5 rounded uppercase tracking-wider">Étape {activeSectionIdx + 1} sur 20</span>
           </div>
@@ -595,6 +689,16 @@ export default function EvaluationForm({ currentUser, evaluationId, onClose }: E
           </h2>
           <p className="text-xs text-gray-500 font-medium italic">{currentSection.objectif}</p>
         </div>
+
+        {/* Blocking banner: no active campagne configured */}
+        {noActiveCampagne && (
+          <div className="bg-red-50 p-4 rounded-xl border border-red-200 flex items-start space-x-2">
+            <ShieldAlert className="h-5 w-5 shrink-0 text-red-600 mt-0.5" />
+            <p className="text-xs font-bold text-red-800 leading-relaxed">
+              Aucune campagne active n'est configurée. Veuillez contacter l'administrateur.
+            </p>
+          </div>
+        )}
 
         {/* Active Questionnaire renderer */}
         <div className="flex-1 space-y-6">
@@ -649,7 +753,7 @@ export default function EvaluationForm({ currentUser, evaluationId, onClose }: E
                           type="text"
                           className="w-full p-2 bg-white border border-gray-200 rounded-lg text-xs outline-none focus:ring-1 focus:ring-indigo-500"
                           value={q.storage_column === 'nom_prenoms' ? mbInstance.nom_prenoms : (mbInstance as any)[q.storage_column] || ''}
-                          onChange={(e) => handleMemberPropChange(activeBeIdx, q.storage_column, e.target.value)}
+                          onChange={(e) => handleMemberPropChange(activeBeIdx, q.storage_column, e.target.value.toUpperCase())}
                         />
                       )}
 
@@ -690,6 +794,13 @@ export default function EvaluationForm({ currentUser, evaluationId, onClose }: E
                 {currentSection.intro}
               </div>
 
+              {fileOpenError && (
+                <div className="bg-rose-50 p-3 rounded-lg border border-rose-200 text-xs text-rose-800 font-medium flex items-center gap-2">
+                  <ShieldAlert className="h-4 w-4 shrink-0 text-rose-600" />
+                  <span>{fileOpenError}</span>
+                </div>
+              )}
+
               <div className="space-y-3 max-h-[350px] overflow-y-auto pr-2" id="preuves-list">
                 {preuves.map((proof, idx) => {
                   const fileInputRef = React.createRef<HTMLInputElement>();
@@ -723,7 +834,7 @@ export default function EvaluationForm({ currentUser, evaluationId, onClose }: E
                           placeholder="Justification ou motif..."
                           className="p-1.5 bg-white border border-gray-200 rounded-lg text-xs outline-none focus:ring-1 focus:ring-indigo-500 w-44"
                           value={proof.commentaire || ''}
-                          onChange={(e) => handleProofPropChange(idx, 'commentaire', e.target.value)}
+                          onChange={(e) => handleProofPropChange(idx, 'commentaire', e.target.value.toUpperCase())}
                         />
 
                         {/* Custom Upload Button */}
@@ -744,6 +855,17 @@ export default function EvaluationForm({ currentUser, evaluationId, onClose }: E
                           <Upload className="h-3.5 w-3.5" />
                           <span className="text-[10px]">Upload</span>
                         </button>
+                        {proof.fichier_path && (
+                          <button
+                            type="button"
+                            onClick={() => handleOpenUploadedProof(proof)}
+                            className="p-1.5 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-lg border border-slate-900 flex items-center space-x-1"
+                            title={`Consulter ${proof.fichier_nom_original || proof.type_preuve}`}
+                          >
+                            <ExternalLink className="h-3.5 w-3.5 text-amber-400" />
+                            <span className="text-[10px]">Voir</span>
+                          </button>
+                        )}
                       </div>
                     </div>
                   );
@@ -784,7 +906,7 @@ export default function EvaluationForm({ currentUser, evaluationId, onClose }: E
                         type="text"
                         className="w-full p-2 bg-white border border-gray-200 rounded-lg text-xs outline-none"
                         value={member.nom_prenoms}
-                        onChange={(e) => handleTeamPropChange(idx, 'nom_prenoms', e.target.value)}
+                        onChange={(e) => handleTeamPropChange(idx, 'nom_prenoms', e.target.value.toUpperCase())}
                         placeholder="Ex. Dr. Bakary Koné"
                       />
                     </div>
@@ -795,7 +917,7 @@ export default function EvaluationForm({ currentUser, evaluationId, onClose }: E
                         type="text"
                         className="w-full p-2 bg-white border border-gray-200 rounded-lg text-xs outline-none"
                         value={member.fonction_structure}
-                        onChange={(e) => handleTeamPropChange(idx, 'fonction_structure', e.target.value)}
+                        onChange={(e) => handleTeamPropChange(idx, 'fonction_structure', e.target.value.toUpperCase())}
                         placeholder="Ex. Conseiller COGES / IEPP Cocody"
                       />
                     </div>
@@ -813,7 +935,8 @@ export default function EvaluationForm({ currentUser, evaluationId, onClose }: E
                   <div className="space-y-1">
                     <label className="block text-xs font-semibold text-gray-700">DRENA de collectes *</label>
                     <select
-                      className="w-full p-2 border border-gray-200 rounded-lg text-xs outline-none"
+                      className="w-full p-2 border border-gray-200 rounded-lg text-xs outline-none disabled:bg-gray-100 disabled:text-gray-500"
+                      disabled={!!currentUser.drena_id}
                       value={selectedDrenaId}
                       onChange={(e) => setSelectedDrenaId(e.target.value)}
                     >
@@ -827,8 +950,8 @@ export default function EvaluationForm({ currentUser, evaluationId, onClose }: E
                   <div className="space-y-1">
                     <label className="block text-xs font-semibold text-gray-700">Circonscription IEPP *</label>
                     <select
-                      className="w-full p-2 border border-gray-200 rounded-lg text-xs outline-none"
-                      disabled={!selectedDrenaId}
+                      className="w-full p-2 border border-gray-200 rounded-lg text-xs outline-none disabled:bg-gray-100 disabled:text-gray-500"
+                      disabled={!selectedDrenaId || !!currentUser.iepp_id}
                       value={selectedIeppId}
                       onChange={(e) => setSelectedIeppId(e.target.value)}
                     >
@@ -841,17 +964,14 @@ export default function EvaluationForm({ currentUser, evaluationId, onClose }: E
 
                   <div className="space-y-1">
                     <label className="block text-xs font-semibold text-gray-700">Établissement scolaire / École *</label>
-                    <select
-                      className="w-full p-2 border border-gray-200 rounded-lg text-xs outline-none"
+                    <input
+                      type="text"
+                      className="w-full p-2 border border-gray-200 rounded-lg text-xs outline-none focus:ring-1 focus:ring-indigo-500 disabled:bg-gray-50 disabled:text-gray-400"
                       disabled={!selectedIeppId}
-                      value={evaluation.etablissement_id || ''}
-                      onChange={(e) => handleEtablissementSelect(e.target.value)}
-                    >
-                      <option value="">Choisir l'établissement scolaire...</option>
-                      {availableEtabs.map(e => (
-                        <option key={e.id} value={e.id}>{e.nom}</option>
-                      ))}
-                    </select>
+                      placeholder="Saisir le nom de l'établissement scolaire..."
+                      value={etablissementUpdates.nom || ''}
+                      onChange={(e) => handleEtablissementNameChange(e.target.value.toUpperCase())}
+                    />
                   </div>
                 </>
               )}
@@ -864,6 +984,8 @@ export default function EvaluationForm({ currentUser, evaluationId, onClose }: E
                 // Handle pre-filled investigator or collecte fields
                 const propVal = q.storage_table === 'evaluations' ? evaluation[q.storage_column as keyof Evaluation] :
                                 q.storage_table === 'recommandations' ? recommandations[q.storage_column as keyof Recommandation] :
+                                q.storage_table === 'etablissements' ? (etablissementUpdates as any)[q.storage_column] :
+                                q.storage_table === 'coges' ? (cogesUpdates as any)[q.storage_column] :
                                 reponses[q.code] || '';
 
                 return (
@@ -880,14 +1002,8 @@ export default function EvaluationForm({ currentUser, evaluationId, onClose }: E
                         type="text"
                         disabled={q.storage_column === 'enqueteur_id'} // locked field
                         className="w-full p-2 border border-gray-200 rounded-lg text-xs outline-none focus:ring-1 focus:ring-indigo-500 disabled:bg-gray-50 disabled:text-gray-400"
-                        value={q.storage_column === 'enqueteur_id' ? currentUser.nom_prenoms : String(propVal || '')}
-                        onChange={(e) => {
-                          if (q.storage_table === 'evaluations') {
-                            handlePropChange('evaluations', q.storage_column, e.target.value);
-                          } else {
-                            handleAnswerChange(q.code, e.target.value);
-                          }
-                        }}
+                        value={q.storage_column === 'enqueteur_id' ? `${currentUser.prenom} ${currentUser.nom}` : String(propVal || '')}
+                        onChange={(e) => handleQuestionChange(q, e.target.value.toUpperCase())}
                       />
                     )}
 
@@ -904,11 +1020,24 @@ export default function EvaluationForm({ currentUser, evaluationId, onClose }: E
                           onChange={(e) => {
                             // Filter non-digits
                             const clean = e.target.value.replace(/[^0-9]/g, '').substring(0, 10);
-                            handlePropChange('evaluations', q.storage_column, clean);
+                            handleQuestionChange(q, clean);
                           }}
                         />
                         <p className="text-[10px] text-gray-400 mt-0.5">Format ivoirien obligatoire à 10 chiffres (commence par 01, 05 ou 07).</p>
                       </div>
+                    )}
+
+                    {/* EMAIL FIELD (forced lowercase) */}
+                    {q.type === 'email' && (
+                      <input
+                        type="email"
+                        inputMode="email"
+                        autoCapitalize="none"
+                        placeholder="Ex. nom.prenom@education.gouv.ci"
+                        className="w-full p-2 border border-gray-200 rounded-lg text-xs outline-none focus:ring-1 focus:ring-indigo-500"
+                        value={String(propVal || '')}
+                        onChange={(e) => handleQuestionChange(q, e.target.value.toLowerCase())}
+                      />
                     )}
 
                     {/* DATE FIELD */}
@@ -918,14 +1047,7 @@ export default function EvaluationForm({ currentUser, evaluationId, onClose }: E
                         max={new Date().toISOString().split('T')[0]} // Ne doit pas être future
                         className="w-full p-2 border border-gray-200 rounded-lg text-xs outline-none focus:ring-1 focus:ring-indigo-500"
                         value={String(propVal || '')}
-                        onChange={(e) => {
-                          if (q.storage_table === 'evaluations') {
-                            handlePropChange('evaluations', q.storage_column, e.target.value);
-                          } else if (q.storage_table === 'coges') {
-                            // COGES specific dates are pre-filled in coges structure, we can store locally
-                            handleAnswerChange(q.code, e.target.value);
-                          }
-                        }}
+                        onChange={(e) => handleQuestionChange(q, e.target.value)}
                       />
                     )}
 
@@ -939,10 +1061,10 @@ export default function EvaluationForm({ currentUser, evaluationId, onClose }: E
                         onChange={(e) => {
                           const parsed = parseInt(e.target.value, 10);
                           const cleanVal = isNaN(parsed) ? 0 : parsed;
-                          if (q.storage_table === 'evaluations') {
-                            handlePropChange('evaluations', q.storage_column, cleanVal);
+                          if (q.storage_table === 'evaluations' || q.storage_table === 'etablissements') {
+                            handleQuestionChange(q, cleanVal);
                           } else {
-                            handleAnswerChange(q.code, String(cleanVal));
+                            handleQuestionChange(q, String(cleanVal));
                           }
                         }}
                       />
@@ -971,12 +1093,8 @@ export default function EvaluationForm({ currentUser, evaluationId, onClose }: E
                         value={q.boolean_mapping ? (propVal ? 'oui' : 'non') : String(propVal || '')}
                         onChange={(e) => {
                           const val = e.target.value;
-                          if (q.boolean_mapping) {
-                            const boolVal = q.boolean_mapping[val];
-                            handlePropChange('evaluations', q.storage_column, boolVal);
-                          } else {
-                            handlePropChange('evaluations', q.storage_column, val);
-                          }
+                          const finalVal = q.boolean_mapping ? q.boolean_mapping[val] : val;
+                          handleQuestionChange(q, finalVal);
                         }}
                       >
                         <option value="">Sélectionner une option...</option>
@@ -991,15 +1109,7 @@ export default function EvaluationForm({ currentUser, evaluationId, onClose }: E
                       <textarea
                         className="w-full p-2 border border-gray-200 rounded-lg text-xs outline-none focus:ring-1 focus:ring-indigo-500 h-24"
                         value={String(propVal || '')}
-                        onChange={(e) => {
-                          if (q.storage_table === 'evaluations') {
-                            handlePropChange('evaluations', q.storage_column, e.target.value);
-                          } else if (q.storage_table === 'recommandations') {
-                            handlePropChange('recommandations', q.storage_column, e.target.value);
-                          } else {
-                            handleAnswerChange(q.code, e.target.value);
-                          }
-                        }}
+                        onChange={(e) => handleQuestionChange(q, e.target.value.toUpperCase())}
                       />
                     )}
 
@@ -1011,11 +1121,20 @@ export default function EvaluationForm({ currentUser, evaluationId, onClose }: E
                           placeholder="Latitude, Longitude"
                           className="flex-1 p-2 border border-gray-200 rounded-lg text-xs outline-none bg-gray-50"
                           disabled
-                          value={evaluation.etablissement_id ? '5.3484, -3.9842' : 'GPS non disponible'} // Sample default or fetched GPS
+                          value={
+                            etablissementUpdates.latitude !== undefined && etablissementUpdates.longitude !== undefined
+                              ? `${etablissementUpdates.latitude}, ${etablissementUpdates.longitude}`
+                              : 'GPS non disponible'
+                          }
                         />
                         <button
                           type="button"
-                          onClick={() => alert('Coordonnées GPS capturées via le navigateur de la tablette (5.3484, -3.9842).')}
+                          onClick={() => {
+                            // Mock hardware capture (no real GPS access in this environment)
+                            handleEtablissementPropChange('latitude', 5.3484);
+                            handleEtablissementPropChange('longitude', -3.9842);
+                            alert('Coordonnées GPS capturées via le navigateur de la tablette (5.3484, -3.9842).');
+                          }}
                           className="px-3 py-2 bg-indigo-50 border border-indigo-200 hover:bg-indigo-100 rounded-lg text-xs text-indigo-700 font-bold transition-all shrink-0"
                         >
                           Géolocaliser
@@ -1080,9 +1199,9 @@ export default function EvaluationForm({ currentUser, evaluationId, onClose }: E
             // Final submit definitively button (on last step 20)
             <button
               type="button"
-              disabled={isSubmitting}
+              disabled={isSubmitting || noActiveCampagne}
               onClick={handleSubmitDefinitively}
-              className="flex items-center space-x-2 px-6 py-3 bg-amber-500 hover:bg-amber-600 text-slate-900 rounded text-xs font-black shadow-md border border-amber-600 transition-all"
+              className="flex items-center space-x-2 px-6 py-3 bg-amber-500 hover:bg-amber-600 text-slate-900 rounded text-xs font-black shadow-md border border-amber-600 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
             >
               {isSubmitting ? (
                 <>

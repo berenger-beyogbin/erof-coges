@@ -7,6 +7,8 @@ import React, { useState, useEffect } from 'react';
 import Dashboard from './components/Dashboard';
 import EvaluationForm from './components/EvaluationForm';
 import Login from './components/Login';
+import CampagneManager from './components/CampagneManager';
+import UserManager from './components/UserManager';
 import { DataService } from './data/dataService';
 import { User, AuditLog } from './types';
 import { supabase, isSupabaseConfigured } from './supabaseClient';
@@ -14,20 +16,21 @@ import {
   Shield, 
   Users, 
   Database, 
-  Clock, 
-  LayoutDashboard, 
+  Clock,
+  LayoutDashboard,
   SlidersHorizontal,
   LogOut,
   AlertCircle,
   HelpCircle,
   UserCheck,
-  Server
+  Server,
+  CalendarRange
 } from 'lucide-react';
 
 export default function App() {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [authInitialized, setAuthInitialized] = useState(false);
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'logs' | 'about'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'campagnes' | 'utilisateurs' | 'logs' | 'about'>('dashboard');
   const [activeView, setActiveView] = useState<'list' | 'form'>('list');
   const [editingEvalId, setEditingEvalId] = useState<string | null>(null);
   
@@ -147,6 +150,11 @@ export default function App() {
     setActiveView('form');
   };
 
+  const handleCloseForm = () => {
+    setEditingEvalId(null);
+    setActiveView('list');
+  };
+
   const handleLogout = async () => {
     if (window.confirm('Voulez-vous vraiment vous déconnecter ?')) {
       if (isSupabaseConfigured) {
@@ -178,7 +186,7 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col">
+    <div className="min-h-screen bg-[#f4f7fb] flex flex-col text-slate-900">
       
       {/* Decorative Côte d'Ivoire flag strip at the top */}
       <div className="h-1.5 w-full flex">
@@ -188,8 +196,8 @@ export default function App() {
       </div>
 
       {/* Main App Header */}
-      <header className="bg-[#0F172A] border-b border-slate-800 text-white shadow-md">
-        <div className="max-w-7xl mx-auto px-4 py-5 sm:px-6 lg:px-8 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+      <header className="bg-[#101828] border-b border-slate-700/70 text-white shadow-lg shadow-slate-900/15">
+        <div className="app-shell py-5 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
           
           <div className="flex items-center space-x-4">
             <div className="w-10 h-10 bg-amber-500 rounded-xl flex items-center justify-center text-[#0F172A] font-extrabold text-xl shrink-0 shadow-md border border-amber-400">
@@ -203,11 +211,11 @@ export default function App() {
           </div>
 
           {/* Connected User Profile Indicator */}
-          <div className="flex flex-wrap items-center gap-3 bg-slate-900/60 p-3 rounded-xl border border-slate-800">
+          <div className="max-w-full flex flex-wrap items-center gap-3 bg-slate-900/60 p-3 rounded-xl border border-slate-800">
             <div className="flex items-center space-x-2">
               <UserCheck className="h-4.5 w-4.5 text-amber-500 shrink-0" />
               <div className="text-left">
-                <p className="text-xs font-bold text-slate-100 leading-tight">{currentUser.nom_prenoms}</p>
+                <p className="text-xs font-bold text-slate-100 leading-tight">{currentUser.prenom} {currentUser.nom}</p>
                 <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide">
                   Rôle : {
                     currentUser.role === 'admin_national' ? 'Admin Central (DAPS-COGES)' :
@@ -219,7 +227,7 @@ export default function App() {
               </div>
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               {isSupabaseConfigured ? (
                 <div className="flex items-center space-x-1 text-[9px] text-emerald-400 font-bold bg-emerald-500/10 px-2 py-1 rounded-lg border border-emerald-500/20 font-mono">
                   <Server className="h-3 w-3" />
@@ -247,9 +255,9 @@ export default function App() {
 
       {/* Primary Navigation Tabs */}
       <div className="bg-[#1E293B] border-b border-slate-700 shadow-sm text-slate-300">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row sm:items-center justify-between py-1 gap-2">
+        <div className="app-shell flex flex-col xl:flex-row xl:items-center justify-between py-1 gap-2">
           
-          <div className="flex space-x-1.5 py-2">
+          <div className="flex flex-wrap items-center gap-2 py-2 min-w-0">
             <button
               onClick={() => {
                 setActiveTab('dashboard');
@@ -264,6 +272,34 @@ export default function App() {
               <LayoutDashboard className="h-4 w-4" />
               <span>Tableau de Bord</span>
             </button>
+
+            {currentUser.role === 'admin_national' && (
+              <button
+                onClick={() => setActiveTab('campagnes')}
+                className={`flex items-center space-x-2 px-3.5 py-2 rounded-lg text-xs font-bold transition-all border ${
+                  activeTab === 'campagnes'
+                    ? 'bg-slate-800 text-white border-slate-600 shadow-sm shadow-slate-950/25'
+                    : 'text-slate-400 border-transparent hover:bg-slate-800/40 hover:text-white'
+                }`}
+              >
+                <CalendarRange className="h-4 w-4" />
+                <span>Campagnes</span>
+              </button>
+            )}
+
+            {currentUser.role === 'admin_national' && (
+              <button
+                onClick={() => setActiveTab('utilisateurs')}
+                className={`flex items-center space-x-2 px-3.5 py-2 rounded-lg text-xs font-bold transition-all border ${
+                  activeTab === 'utilisateurs'
+                    ? 'bg-slate-800 text-white border-slate-600 shadow-sm shadow-slate-950/25'
+                    : 'text-slate-400 border-transparent hover:bg-slate-800/40 hover:text-white'
+                }`}
+              >
+                <Users className="h-4 w-4" />
+                <span>Utilisateurs</span>
+              </button>
+            )}
 
             {currentUser.role === 'admin_national' && (
               <button
@@ -293,7 +329,7 @@ export default function App() {
           </div>
 
           {/* Current Local UTC Time */}
-          <div className="text-right text-xs text-slate-400 font-mono flex items-center justify-end space-x-1.5 py-2">
+          <div className="shrink-0 text-right text-xs text-slate-400 font-mono flex items-center justify-end space-x-1.5 py-2">
             <Clock className="h-3.5 w-3.5 text-amber-500" />
             <span>Horloge universelle (UTC) :</span>
             <span className="font-bold text-slate-200">{currentTime.toISOString().replace('T', ' ').substring(0, 19)}</span>
@@ -303,7 +339,7 @@ export default function App() {
       </div>
 
       {/* Main Workspace Frame */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 py-6 sm:px-6 lg:px-8">
+      <main className="app-shell flex-1 py-7 overflow-x-hidden">
         
         {activeTab === 'dashboard' && (
           activeView === 'list' ? (
@@ -316,9 +352,19 @@ export default function App() {
             <EvaluationForm 
               currentUser={currentUser}
               evaluationId={editingEvalId}
-              onClose={() => setActiveView('list')}
+              onClose={handleCloseForm}
             />
           )
+        )}
+
+        {/* Campaign management tab panel */}
+        {activeTab === 'campagnes' && currentUser.role === 'admin_national' && (
+          <CampagneManager />
+        )}
+
+        {/* User management tab panel */}
+        {activeTab === 'utilisateurs' && currentUser.role === 'admin_national' && (
+          <UserManager currentUser={currentUser} />
         )}
 
         {/* Audit Logs tab panel */}
@@ -347,12 +393,12 @@ export default function App() {
                 <table className="min-w-full divide-y divide-slate-200 text-[11px]">
                   <thead className="bg-slate-50">
                     <tr>
-                      <th className="px-4 py-3 text-left font-bold text-slate-500 uppercase tracking-wider">Horodatage</th>
-                      <th className="px-4 py-3 text-left font-bold text-slate-500 uppercase tracking-wider">Utilisateur ID</th>
-                      <th className="px-4 py-3 text-left font-bold text-slate-500 uppercase tracking-wider">Action</th>
-                      <th className="px-4 py-3 text-left font-bold text-slate-500 uppercase tracking-wider">Table Cible</th>
-                      <th className="px-4 py-3 text-left font-bold text-slate-500 uppercase tracking-wider">ID de Ligne</th>
-                      <th className="px-4 py-3 text-left font-bold text-slate-500 uppercase tracking-wider">Détail des données</th>
+                      <th className="px-4 py-3 text-center font-bold text-slate-500 uppercase tracking-wider">Horodatage</th>
+                      <th className="px-4 py-3 text-center font-bold text-slate-500 uppercase tracking-wider">Utilisateur ID</th>
+                      <th className="px-4 py-3 text-center font-bold text-slate-500 uppercase tracking-wider">Action</th>
+                      <th className="px-4 py-3 text-center font-bold text-slate-500 uppercase tracking-wider">Table Cible</th>
+                      <th className="px-4 py-3 text-center font-bold text-slate-500 uppercase tracking-wider">ID de Ligne</th>
+                      <th className="px-4 py-3 text-center font-bold text-slate-500 uppercase tracking-wider">Détail des données</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-200 bg-white font-mono">
@@ -393,7 +439,7 @@ export default function App() {
             
             <div className="space-y-4 text-xs text-slate-600 leading-relaxed">
               <p>
-                L'<strong>Évaluation Rapide Organisationnelle et Fonctionnelle (EROF)</strong> est un instrument officiel de diagnostic national instauré par la Direction de l'Animation, de la Promotion et du Suivi des COGES (DAPS-COGES) du Ministère de l'Éducation Nationale et de l'Alphabétisation.
+                L'<strong>Évaluation Rapide Organisationnelle et Fonctionnelle (EROF)</strong> est un instrument officiel de diagnostic national instauré par la Direction de l'Animation, de la Promotion et du Suivi des COGES (DAPS-COGES) du MENAET.
               </p>
               
               <h3 className="text-sm font-bold text-slate-800 mt-4 uppercase tracking-wider font-display">Méthodologie & Scoring</h3>
@@ -433,7 +479,7 @@ export default function App() {
 
       {/* Footer copyright */}
       <footer className="bg-slate-900 text-slate-400 py-6 border-t border-slate-800 text-center text-[10px] uppercase font-semibold tracking-wider">
-        <span>© 2026 - Ministère de l'Éducation Nationale et de l'Alphabétisation • DAPS-COGES Côte d'Ivoire</span>
+        <span>© 2026 - MENAET • DAPS-COGES Côte d'Ivoire</span>
       </footer>
 
     </div>

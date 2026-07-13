@@ -85,18 +85,7 @@
         {
           "code": "1.6",
           "section": 1,
-          "libelle": "Code COGES (si disponible)",
-          "type": "text",
-          "required": false,
-          "controle_coherence": null,
-          "preuve_attendue": null,
-          "storage_table": "coges",
-          "storage_column": "code_coges"
-        },
-        {
-          "code": "1.7",
-          "section": 1,
-          "libelle": "Type d'établissement",
+          "libelle": "Type de COGES",
           "type": "select",
           "options": [
             {
@@ -127,7 +116,7 @@
           "storage_column": "type_etablissement"
         },
         {
-          "code": "1.8",
+          "code": "1.7",
           "section": 1,
           "libelle": "Date de création de l'école / de l'établissement",
           "type": "date",
@@ -138,7 +127,7 @@
           "storage_column": "date_creation"
         },
         {
-          "code": "1.9",
+          "code": "1.8",
           "section": 1,
           "libelle": "Date de création du COGES",
           "type": "date",
@@ -152,7 +141,7 @@
           "storage_column": "date_creation"
         },
         {
-          "code": "1.10",
+          "code": "1.9",
           "section": 1,
           "libelle": "Date de la dernière AG élective",
           "type": "date",
@@ -166,7 +155,7 @@
           "storage_column": "date_derniere_ag_elective"
         },
         {
-          "code": "1.11",
+          "code": "1.10",
           "section": 1,
           "libelle": "Effectif total des élèves",
           "type": "number",
@@ -174,13 +163,13 @@
           "validation": {
             "min": 0
           },
-          "controle_coherence": "Doit être égal à 1.12 + 1.13",
+          "controle_coherence": "Doit être égal à 1.11 + 1.12",
           "preuve_attendue": null,
           "storage_table": "evaluations",
           "storage_column": "effectif_total"
         },
         {
-          "code": "1.12",
+          "code": "1.11",
           "section": 1,
           "libelle": "Effectif filles",
           "type": "number",
@@ -188,13 +177,13 @@
           "validation": {
             "min": 0
           },
-          "controle_coherence": "1.12 + 1.13 = 1.11",
+          "controle_coherence": "1.11 + 1.12 = 1.10",
           "preuve_attendue": null,
           "storage_table": "evaluations",
           "storage_column": "effectif_filles"
         },
         {
-          "code": "1.13",
+          "code": "1.12",
           "section": 1,
           "libelle": "Effectif garçons",
           "type": "number",
@@ -202,13 +191,13 @@
           "validation": {
             "min": 0
           },
-          "controle_coherence": "1.12 + 1.13 = 1.11",
+          "controle_coherence": "1.11 + 1.12 = 1.10",
           "preuve_attendue": null,
           "storage_table": "evaluations",
           "storage_column": "effectif_garcons"
         },
         {
-          "code": "1.14",
+          "code": "1.13",
           "section": 1,
           "libelle": "Nom et prénoms du Président du Bureau Exécutif",
           "type": "text",
@@ -219,7 +208,7 @@
           "storage_column": "president_nom"
         },
         {
-          "code": "1.15",
+          "code": "1.14",
           "section": 1,
           "libelle": "Contact du Président du Bureau Exécutif",
           "type": "tel",
@@ -234,7 +223,7 @@
           "storage_column": "president_contact"
         },
         {
-          "code": "1.16",
+          "code": "1.15",
           "section": 1,
           "libelle": "Nom du Conseiller chargé des COGES (Conseiller à l'extrascolaire / IEPP)",
           "type": "text",
@@ -245,7 +234,7 @@
           "storage_column": "conseiller_nom"
         },
         {
-          "code": "1.17",
+          "code": "1.16",
           "section": 1,
           "libelle": "Contact du Conseiller",
           "type": "tel",
@@ -260,10 +249,10 @@
           "storage_column": "conseiller_contact"
         },
         {
-          "code": "1.18",
+          "code": "1.17",
           "section": 1,
           "libelle": "E-mail du Conseiller",
-          "type": "text",
+          "type": "email",
           "required": true,
           "validation": {
             "pattern": "^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$",
@@ -275,7 +264,7 @@
           "storage_column": "conseiller_email"
         },
         {
-          "code": "1.19",
+          "code": "1.18",
           "section": 1,
           "libelle": "Nom de l'enquêteur",
           "type": "text",
@@ -287,7 +276,7 @@
           "storage_note": "Auto-rempli depuis la session, non modifiable par l'enquêteur."
         },
         {
-          "code": "1.20",
+          "code": "1.19",
           "section": 1,
           "libelle": "Date de collecte",
           "type": "date",
@@ -301,7 +290,7 @@
           "storage_column": "date_collecte"
         },
         {
-          "code": "1.21",
+          "code": "1.20",
           "section": 1,
           "libelle": "Coordonnées GPS de l'établissement",
           "type": "gps",

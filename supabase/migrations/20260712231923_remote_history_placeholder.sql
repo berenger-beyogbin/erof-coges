@@ -1,0 +1,3 @@
+-- Placeholder for a migration already applied on the remote Supabase project
+-- before the database history was committed to this repository.
+-- The canonical reproducible schema is consolidated in 20260713040000_erof_baseline.sql.

@@ -21,10 +21,13 @@ export type EvaluationStatus =
 export interface User {
   id: string;
   email: string;
-  nom_prenoms: string;
+  nom: string;
+  prenom: string;
   role: UserRole;
+  telephone?: string;
   drena_id?: string;
   iepp_id?: string;
+  actif?: boolean;
 }
 
 export interface Drena {
@@ -63,10 +66,17 @@ export interface Coges {
   date_derniere_ag_elective: string;
 }
 
+export type CampagneStatut = 'ouverte' | 'fermee';
+
 export interface Campagne {
   id: string;
   nom: string;
-  active: boolean;
+  annee_scolaire: string;
+  date_debut: string;
+  date_fin?: string;
+  statut: CampagneStatut;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface Evaluation {
@@ -107,7 +117,16 @@ export interface EvaluationReponse {
   id: string;
   evaluation_id: string;
   question_code: string;
-  reponse_valeur: string; // Stored as string to match EAV pattern
+  section_num: number;
+  // Typed EAV: every question currently routed to this table is a rating_1_5
+  // or number question, so valeur_numerique is the only value column in use.
+  // valeur_texte / valeur_date / valeur_json exist in the schema for other
+  // question types but aren't populated by this form yet.
+  valeur_numerique?: number | null;
+  valeur_texte?: string | null;
+  valeur_date?: string | null;
+  valeur_json?: unknown | null;
+  commentaire?: string | null;
 }
 
 export interface EvaluationScore {

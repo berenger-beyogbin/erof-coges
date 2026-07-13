@@ -1,0 +1,3 @@
+-- Placeholder for a migration history row that already exists on the remote
+-- Supabase project. The schema changes from that remote state are consolidated
+-- in later repository migrations.

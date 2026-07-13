@@ -9,7 +9,7 @@ Cette application web professionnelle permet aux enquêteurs de terrain de colle
 ## Fonctionnalités Principales
 
 1. **Authentification Intégrée** : Connexion via Supabase Auth avec contrôle d'activation de compte (`is_active`).
-2. **Collecte Multi-sections** : 20 sections et 112 questions couvrant l'ensemble des aspects de gestion du COGES.
+2. **Collecte Multi-sections** : 20 sections et 111 questions modèles couvrant l'ensemble des aspects de gestion du COGES.
 3. **Calcul Automatique des Scores** : Algorithme robuste basé sur les pondérations officielles de la DAPS-COGES.
 4. **Tableau de Bord Décisionnel** : Visualisation des performances par axe, taux de preuves documentaires et filtres géographiques (DRENA, IEPP).
 5. **Exports Complets** : Téléchargement instantané des données brutes, des synthèses de scores et des preuves auditées en CSV.
@@ -19,6 +19,8 @@ Cette application web professionnelle permet aux enquêteurs de terrain de colle
 ## Configuration de Supabase
 
 Pour connecter cette application à votre projet Supabase existant :
+
+> Le schéma reproductible, le seed minimal et les Edge Functions sont versionnés dans `supabase/`. Voir `docs/SUPABASE_SETUP.md` pour la procédure complète.
 
 1. Définissez les variables d'environnement dans votre fichier `.env` ou configurez-les directement dans l'interface de déploiement de l'application :
 
@@ -37,7 +39,7 @@ VITE_SUPABASE_ANON_KEY="votre-cle-anonyme-publique"
    - `evaluation_reponses` (Réponses individuelles EAV)
    - `membres_be` (Membres du Bureau Exécutif)
    - `preuves_documentaires` (Preuves auditées de section 17)
-   - `equipe_evaluation` (Membres de l'équipe de collecte de section 20)
+   - `equipes_evaluation` (Membres de l'équipe de collecte de section 20)
    - `recommandations` (Forces, faiblesses et actions prioritaires de section 19)
 
 ---

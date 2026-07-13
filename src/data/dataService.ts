@@ -3,179 +3,78 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { 
-  User, 
-  Drena, 
-  Iepp, 
-  Etablissement, 
-  Coges, 
-  Campagne, 
-  Evaluation, 
-  EvaluationReponse, 
-  EvaluationScore, 
-  PreuveDocumentaire, 
-  MembreBe, 
-  EquipeEvaluation, 
-  Recommandation, 
+import {
+  User,
+  UserRole,
+  Drena,
+  Iepp,
+  Etablissement,
+  Coges,
+  Campagne,
+  CampagneStatut,
+  Evaluation,
+  EvaluationReponse,
+  EvaluationScore,
+  PreuveDocumentaire,
+  MembreBe,
+  EquipeEvaluation,
+  Recommandation,
   AuditLog,
   EvaluationStatus
 } from '../types';
 import { supabase, isSupabaseConfigured } from '../supabaseClient';
+import { validateEvaluationForSubmission } from '../validation';
 
-// Pre-seeded static data representing the MENAET / DAPS-COGES regional structure
+const PREUVES_BUCKET = 'preuves-erof';
+
+// Builds the upsert payload for a storage_table-scoped side entity (etablissements / coges)
+// linked to an evaluation. Guards against sending an update with a blank/missing parent id
+// (never send "" as a UUID) instead of silently dropping the data.
+function buildLinkedUpdatePayload<T extends { id?: string }>(
+  parentId: string | undefined,
+  updates: Partial<T> | undefined,
+  entityLabel: string
+): { payload: (Partial<T> & { id: string }) | null; error?: string } {
+  if (!updates || Object.keys(updates).length === 0) return { payload: null };
+  if (!parentId) {
+    return { payload: null, error: `Impossible d'enregistrer les informations "${entityLabel}" : aucun identifiant n'est associé à cette évaluation.` };
+  }
+  const { id: _ignored, ...rest } = updates as any;
+  return { payload: { ...(rest as Partial<T>), id: parentId } };
+}
+
+function normalizePreuveStoragePath(filePath: string): string {
+  return filePath
+    .trim()
+    .replace(/^\/+/, '')
+    .replace(new RegExp(`^${PREUVES_BUCKET}/+`), '');
+}
+
+// Regional structure (MENAET / DAPS-COGES). Populate via the app once real data is available.
 export const PRE_SEEDED_DRENAS: Drena[] = [
-  { id: 'drena_01', nom: 'Abidjan 1 (Lagunes)' },
-  { id: 'drena_02', nom: 'Bouaké 2 (Gbêkê)' },
-  { id: 'drena_03', nom: 'Yamoussoukro (Lacs)' },
-  { id: 'drena_04', nom: 'Korhogo (Poro)' },
-  { id: 'drena_05', nom: 'San Pedro (Bas-Sassandra)' }
+  { id: 'drena_agboville', nom: 'AGBOVILLE' },
+  { id: 'drena_daloa', nom: 'DALOA' },
+  { id: 'drena_tiassale', nom: 'TIASSALÉ' },
+  { id: 'drena_guiglo', nom: 'GUIGLO' },
+  { id: 'drena_duekoue', nom: 'DUÉKOUÉ' },
+  { id: 'drena_minignan', nom: 'MINIGNAN' },
+  { id: 'drena_odienne', nom: 'ODIENNÉ' },
+  { id: 'drena_touba', nom: 'TOUBA' },
+  { id: 'drena_issia', nom: 'ISSIA' },
+  { id: 'drena_ferke', nom: 'FERKÉ' },
+  { id: 'drena_man', nom: 'MAN' },
+  { id: 'drena_danane', nom: 'DANANÉ' }
 ];
 
-export const PRE_SEEDED_IEPPS: Iepp[] = [
-  { id: 'iepp_cocody', nom: 'Cocody (Abidjan 1)', drena_id: 'drena_01' },
-  { id: 'iepp_plateau', nom: 'Plateau (Abidjan 1)', drena_id: 'drena_01' },
-  { id: 'iepp_bouake_v', nom: 'Bouaké Ville (Bouaké 2)', drena_id: 'drena_02' },
-  { id: 'iepp_yam_est', nom: 'Yamoussoukro Est', drena_id: 'drena_03' },
-  { id: 'iepp_korhogo_n', nom: 'Korhogo Nord', drena_id: 'drena_04' },
-  { id: 'iepp_sp_ville', nom: 'San Pedro Ville', drena_id: 'drena_05' }
-];
+export const PRE_SEEDED_IEPPS: Iepp[] = [];
 
-export const PRE_SEEDED_ETABLISSEMENTS: Etablissement[] = [
-  {
-    id: 'etab_01',
-    nom: 'EPP Cocody Centre',
-    code_desps: 'DESPS-00124-CO',
-    type_etablissement: 'groupe_scolaire',
-    iepp_id: 'iepp_cocody',
-    localite: 'Cocody Cité',
-    statut: 'public',
-    milieu: 'urbain',
-    nombre_classes: 12,
-    nombre_enseignants: 14,
-    cantine: true,
-    date_creation: '1985-09-15',
-    latitude: 5.3484,
-    longitude: -3.9842
-  },
-  {
-    id: 'etab_02',
-    nom: 'EPP Bouaké Nimbo',
-    code_desps: 'DESPS-00512-BO',
-    type_etablissement: 'primaire',
-    iepp_id: 'iepp_bouake_v',
-    localite: 'Nimbo',
-    statut: 'public',
-    milieu: 'urbain',
-    nombre_classes: 6,
-    nombre_enseignants: 7,
-    cantine: false,
-    date_creation: '1998-10-01',
-    latitude: 7.6901,
-    longitude: -5.0264
-  },
-  {
-    id: 'etab_03',
-    nom: 'GS Yamoussoukro Résidentiel',
-    code_desps: 'DESPS-00819-YA',
-    type_etablissement: 'groupe_scolaire',
-    iepp_id: 'iepp_yam_est',
-    localite: 'Quartier Résidentiel',
-    statut: 'prive_laic',
-    milieu: 'periurbain',
-    nombre_classes: 18,
-    nombre_enseignants: 22,
-    cantine: true,
-    date_creation: '2005-09-01',
-    latitude: 6.8120,
-    longitude: -5.2710
-  },
-  {
-    id: 'etab_04',
-    nom: 'EPP Korhogo Koko',
-    code_desps: 'DESPS-00941-KO',
-    type_etablissement: 'primaire',
-    iepp_id: 'iepp_korhogo_n',
-    localite: 'Koko',
-    statut: 'public',
-    milieu: 'rural',
-    nombre_classes: 6,
-    nombre_enseignants: 5,
-    cantine: true,
-    date_creation: '2010-02-14',
-    latitude: 9.4580,
-    longitude: -5.6290
-  }
-];
+export const PRE_SEEDED_ETABLISSEMENTS: Etablissement[] = [];
 
-export const PRE_SEEDED_COGES: Coges[] = [
-  {
-    id: 'coges_01',
-    etablissement_id: 'etab_01',
-    code_coges: 'COG-001-AB',
-    date_creation: '1995-10-20',
-    date_derniere_ag_elective: '2025-11-05'
-  },
-  {
-    id: 'coges_02',
-    etablissement_id: 'etab_02',
-    code_coges: 'COG-012-BU',
-    date_creation: '2000-01-10',
-    date_derniere_ag_elective: '2024-10-15'
-  },
-  {
-    id: 'coges_03',
-    etablissement_id: 'etab_03',
-    code_coges: 'COG-055-YA',
-    date_creation: '2006-03-12',
-    date_derniere_ag_elective: '2025-12-01'
-  },
-  {
-    id: 'coges_04',
-    etablissement_id: 'etab_04',
-    code_coges: 'COG-088-KO',
-    date_creation: '2012-05-18',
-    date_derniere_ag_elective: '2023-11-20'
-  }
-];
+export const PRE_SEEDED_COGES: Coges[] = [];
 
-export const PRE_SEEDED_CAMPAGNES: Campagne[] = [
-  { id: 'camp_2026', nom: 'Évaluation Annuelle COGES 2026', active: true }
-];
+export const PRE_SEEDED_CAMPAGNES: Campagne[] = [];
 
-export const PRE_SEEDED_USERS: User[] = [
-  {
-    id: 'user_admin',
-    email: 'admin@erof-coges.ci',
-    nom_prenoms: 'Dr. Bakary Koné (Directeur DAPS-COGES)',
-    role: 'admin_national'
-  },
-  {
-    id: 'user_drena_gbeke',
-    email: 'drena.gbeke@erof-coges.ci',
-    nom_prenoms: 'Mme Jeanne Koffi (Superviseur DRENA Bouaké 2)',
-    role: 'superviseur_drena',
-    drena_id: 'drena_02'
-  },
-  {
-    id: 'user_iepp_cocody',
-    email: 'iepp.cocody@erof-coges.ci',
-    nom_prenoms: 'M. Albert Coulibaly (Inspecteur IEPP Cocody)',
-    role: 'superviseur_iepp',
-    iepp_id: 'iepp_cocody'
-  },
-  {
-    id: 'user_enqueteur_01',
-    email: 'enqueteur1@erof-coges.ci',
-    nom_prenoms: 'Jean-Pierre Touré (Enquêteur Lagunes)',
-    role: 'enqueteur'
-  },
-  {
-    id: 'user_lecteur_national',
-    email: 'lecteur@erof-coges.ci',
-    nom_prenoms: 'Observateur National (MENAET)',
-    role: 'lecteur'
-  }
-];
+export const PRE_SEEDED_USERS: User[] = [];
 
 export function computeEvaluationScores(
   evaluationId: string,
@@ -183,14 +82,14 @@ export function computeEvaluationScores(
   membresBe: MembreBe[],
   preuves: PreuveDocumentaire[]
 ): EvaluationScore {
-  const answerMap = new Map<string, string>();
-  responses.forEach(r => answerMap.set(r.question_code, r.reponse_valeur));
+  const answerMap = new Map<string, number>();
+  responses.forEach(r => {
+    if (r.valeur_numerique !== null && r.valeur_numerique !== undefined) answerMap.set(r.question_code, r.valeur_numerique);
+  });
 
   const getNumVal = (code: string, def = 1): number => {
     const val = answerMap.get(code);
-    if (!val) return def;
-    const parsed = parseInt(val, 10);
-    return isNaN(parsed) ? def : parsed;
+    return val === undefined || isNaN(val) ? def : val;
   };
 
   const avgCodes = (codes: string[]): number => {
@@ -334,276 +233,11 @@ function setStoredItem<T>(key: string, value: T): void {
   localStorage.setItem(STORAGE_KEY_PREFIX + key, JSON.stringify(value));
 }
 
-const SEEDED_EVALUATIONS: Evaluation[] = [
-  {
-    id: '8cb3850b-4171-460d-a0e4-b78f87e6fa56',
-    etablissement_id: 'etab_01',
-    coges_id: 'coges_01',
-    campagne_id: 'camp_2026',
-    enqueteur_id: 'user_enqueteur_01',
-    date_collecte: '2026-07-01',
-    statut: 'valide',
-    president_nom: 'M. Mamadou Konaté',
-    president_contact: '0102030405',
-    conseiller_nom: 'Mme Aminata Sylla',
-    conseiller_contact: '0506070809',
-    conseiller_email: 'aminata.sylla@mena.ci',
-    historique_creation: 'Le COGES a été créé en 1995 à l\'initiative des parents d\'élèves pour faire face au manque de salles de classe. Il a été redynamisé en 2025.',
-    observations_generales: 'Excellente mobilisation du Bureau Exécutif. Les registres financiers sont bien tenus.',
-    effectif_total: 540,
-    effectif_filles: 280,
-    effectif_garcons: 260,
-    submitted_at: '2026-07-02T10:00:00Z',
-    validated_by: 'user_admin',
-    validated_at: '2026-07-03T14:30:00Z',
-    locked: true,
-    created_by: 'user_enqueteur_01',
-    created_at: '2026-07-01T08:00:00Z'
-  },
-  {
-    id: 'cd4e9d01-ffb0-461d-8473-b26a6c1bf035',
-    etablissement_id: 'etab_02',
-    coges_id: 'coges_02',
-    campagne_id: 'camp_2026',
-    enqueteur_id: 'user_enqueteur_01',
-    date_collecte: '2026-07-05',
-    statut: 'soumis',
-    president_nom: 'M. Koffi Yao',
-    president_contact: '0707070707',
-    conseiller_nom: 'M. Soro Kafalo',
-    conseiller_contact: '0101010101',
-    conseiller_email: 'soro.kafalo@mena.ci',
-    historique_creation: 'Créé en 2000. Fonctionne difficilement suite à des dissensions internes résolues récemment.',
-    observations_generales: 'Bureau d\'élèves très motivé, mais manque de formation sur les rôles financiers.',
-    effectif_total: 320,
-    effectif_filles: 150,
-    effectif_garcons: 170,
-    submitted_at: '2026-07-06T11:20:00Z',
-    locked: false,
-    created_by: 'user_enqueteur_01',
-    created_at: '2026-07-05T09:00:00Z'
-  },
-  {
-    id: 'a062828b-b6fb-45eb-92f7-b7e3e2d6fa21',
-    etablissement_id: 'etab_03',
-    coges_id: 'coges_03',
-    campagne_id: 'camp_2026',
-    enqueteur_id: 'user_enqueteur_01',
-    date_collecte: '2026-07-10',
-    statut: 'brouillon',
-    president_nom: 'Mme Florence Diallo',
-    president_contact: '0505050505',
-    conseiller_nom: 'M. Tanoh Marc',
-    conseiller_contact: '0707080910',
-    conseiller_email: 'tanoh.marc@mena.ci',
-    historique_creation: 'Nouveau COGES installé récemment dans le quartier résidentiel.',
-    effectif_total: 600,
-    effectif_filles: 310,
-    effectif_garcons: 290,
-    locked: false,
-    created_by: 'user_enqueteur_01',
-    created_at: '2026-07-10T08:15:00Z'
-  }
-];
+const SEEDED_EVALUATIONS: Evaluation[] = [];
 
-const SEEDED_REPONSES: EvaluationReponse[] = [
-  { id: 'r1', evaluation_id: '8cb3850b-4171-460d-a0e4-b78f87e6fa56', question_code: '3.2', reponse_valeur: '5' },
-  { id: 'r2', evaluation_id: '8cb3850b-4171-460d-a0e4-b78f87e6fa56', question_code: '4.1', reponse_valeur: '5' },
-  { id: 'r3', evaluation_id: '8cb3850b-4171-460d-a0e4-b78f87e6fa56', question_code: '4.2', reponse_valeur: '4' },
-  { id: 'r4', evaluation_id: '8cb3850b-4171-460d-a0e4-b78f87e6fa56', question_code: '4.3', reponse_valeur: '5' },
-  { id: 'r5', evaluation_id: '8cb3850b-4171-460d-a0e4-b78f87e6fa56', question_code: '5.1', reponse_valeur: '5' },
-  { id: 'r6', evaluation_id: '8cb3850b-4171-460d-a0e4-b78f87e6fa56', question_code: '5.2', reponse_valeur: '4' },
-  { id: 'r7', evaluation_id: '8cb3850b-4171-460d-a0e4-b78f87e6fa56', question_code: '5.3', reponse_valeur: '4' },
-  { id: 'r8', evaluation_id: '8cb3850b-4171-460d-a0e4-b78f87e6fa56', question_code: '5.4', reponse_valeur: '4' },
-  { id: 'r9', evaluation_id: '8cb3850b-4171-460d-a0e4-b78f87e6fa56', question_code: '5.5', reponse_valeur: '2' },
-  { id: 'r10', evaluation_id: '8cb3850b-4171-460d-a0e4-b78f87e6fa56', question_code: '5.6', reponse_valeur: '5' },
-  { id: 'r11', evaluation_id: '8cb3850b-4171-460d-a0e4-b78f87e6fa56', question_code: '5.7', reponse_valeur: '5' },
-  { id: 'r12', evaluation_id: '8cb3850b-4171-460d-a0e4-b78f87e6fa56', question_code: '5.8', reponse_valeur: '5' },
-  { id: 'r13', evaluation_id: '8cb3850b-4171-460d-a0e4-b78f87e6fa56', question_code: '5.9', reponse_valeur: '5' },
-  { id: 'r14', evaluation_id: '8cb3850b-4171-460d-a0e4-b78f87e6fa56', question_code: '6.1', reponse_valeur: '5' },
-  { id: 'r15', evaluation_id: '8cb3850b-4171-460d-a0e4-b78f87e6fa56', question_code: '6.2', reponse_valeur: '4' },
-  { id: 'r16', evaluation_id: '8cb3850b-4171-460d-a0e4-b78f87e6fa56', question_code: '6.3', reponse_valeur: '5' },
-  { id: 'r17', evaluation_id: '8cb3850b-4171-460d-a0e4-b78f87e6fa56', question_code: '6.4', reponse_valeur: '5' },
-  { id: 'r18', evaluation_id: '8cb3850b-4171-460d-a0e4-b78f87e6fa56', question_code: '6.5', reponse_valeur: '5' },
-  { id: 'r19', evaluation_id: '8cb3850b-4171-460d-a0e4-b78f87e6fa56', question_code: '6.6', reponse_valeur: '5' },
-  { id: 'r20', evaluation_id: '8cb3850b-4171-460d-a0e4-b78f87e6fa56', question_code: '7.1', reponse_valeur: '5' },
-  { id: 'r21', evaluation_id: '8cb3850b-4171-460d-a0e4-b78f87e6fa56', question_code: '8.1', reponse_valeur: '5' },
-  { id: 'r22', evaluation_id: '8cb3850b-4171-460d-a0e4-b78f87e6fa56', question_code: '8.2', reponse_valeur: '4' },
-  { id: 'r23', evaluation_id: '8cb3850b-4171-460d-a0e4-b78f87e6fa56', question_code: '8.3', reponse_valeur: '5' },
-  { id: 'r24', evaluation_id: '8cb3850b-4171-460d-a0e4-b78f87e6fa56', question_code: '8.4', reponse_valeur: '5' },
-  { id: 'r25', evaluation_id: '8cb3850b-4171-460d-a0e4-b78f87e6fa56', question_code: '8.5', reponse_valeur: '4' },
-  { id: 'r26', evaluation_id: '8cb3850b-4171-460d-a0e4-b78f87e6fa56', question_code: '8.6', reponse_valeur: '5' },
-  { id: 'r27', evaluation_id: '8cb3850b-4171-460d-a0e4-b78f87e6fa56', question_code: '9.1', reponse_valeur: '4' },
-  { id: 'r28', evaluation_id: '8cb3850b-4171-460d-a0e4-b78f87e6fa56', question_code: '9.2', reponse_valeur: '5' },
-  { id: 'r29', evaluation_id: '8cb3850b-4171-460d-a0e4-b78f87e6fa56', question_code: '9.3', reponse_valeur: '4' },
-  { id: 'r30', evaluation_id: '8cb3850b-4171-460d-a0e4-b78f87e6fa56', question_code: '9.4', reponse_valeur: '5' },
-  { id: 'r31', evaluation_id: '8cb3850b-4171-460d-a0e4-b78f87e6fa56', question_code: '9.5', reponse_valeur: '5' },
-  { id: 'r32', evaluation_id: '8cb3850b-4171-460d-a0e4-b78f87e6fa56', question_code: '9.6', reponse_valeur: '5' },
-  { id: 'r33', evaluation_id: '8cb3850b-4171-460d-a0e4-b78f87e6fa56', question_code: '9.7', reponse_valeur: '4' },
-  { id: 'r34', evaluation_id: '8cb3850b-4171-460d-a0e4-b78f87e6fa56', question_code: '10.1', reponse_valeur: '5' },
-  { id: 'r35', evaluation_id: '8cb3850b-4171-460d-a0e4-b78f87e6fa56', question_code: '10.2', reponse_valeur: '5' },
-  { id: 'r36', evaluation_id: '8cb3850b-4171-460d-a0e4-b78f87e6fa56', question_code: '10.3', reponse_valeur: '5' },
-  { id: 'r37', evaluation_id: '8cb3850b-4171-460d-a0e4-b78f87e6fa56', question_code: '10.4', reponse_valeur: '4' },
-  { id: 'r38', evaluation_id: '8cb3850b-4171-460d-a0e4-b78f87e6fa56', question_code: '10.5', reponse_valeur: '5' },
-  { id: 'r39', evaluation_id: '8cb3850b-4171-460d-a0e4-b78f87e6fa56', question_code: '10.6', reponse_valeur: '5' },
-  { id: 'r40', evaluation_id: '8cb3850b-4171-460d-a0e4-b78f87e6fa56', question_code: '11.1', reponse_valeur: '5' },
-  { id: 'r41', evaluation_id: '8cb3850b-4171-460d-a0e4-b78f87e6fa56', question_code: '12.1', reponse_valeur: '5' },
-  { id: 'r42', evaluation_id: '8cb3850b-4171-460d-a0e4-b78f87e6fa56', question_code: '12.2', reponse_valeur: '5' },
-  { id: 'r43', evaluation_id: '8cb3850b-4171-460d-a0e4-b78f87e6fa56', question_code: '13.1', reponse_valeur: '5' },
-  { id: 'r44', evaluation_id: '8cb3850b-4171-460d-a0e4-b78f87e6fa56', question_code: '13.2', reponse_valeur: '5' },
-  { id: 'r45', evaluation_id: '8cb3850b-4171-460d-a0e4-b78f87e6fa56', question_code: '14.1', reponse_valeur: '4' },
-  { id: 'r46', evaluation_id: '8cb3850b-4171-460d-a0e4-b78f87e6fa56', question_code: '15.1', reponse_valeur: '4' },
+const SEEDED_REPONSES: EvaluationReponse[] = [];
 
-  { id: 'r101', evaluation_id: 'cd4e9d01-ffb0-461d-8473-b26a6c1bf035', question_code: '3.2', reponse_valeur: '3' },
-  { id: 'r102', evaluation_id: 'cd4e9d01-ffb0-461d-8473-b26a6c1bf035', question_code: '4.1', reponse_valeur: '3' },
-  { id: 'r103', evaluation_id: 'cd4e9d01-ffb0-461d-8473-b26a6c1bf035', question_code: '4.2', reponse_valeur: '2' },
-  { id: 'r104', evaluation_id: 'cd4e9d01-ffb0-461d-8473-b26a6c1bf035', question_code: '4.3', reponse_valeur: '3' },
-  { id: 'r105', evaluation_id: 'cd4e9d01-ffb0-461d-8473-b26a6c1bf035', question_code: '5.1', reponse_valeur: '2' },
-  { id: 'r106', evaluation_id: 'cd4e9d01-ffb0-461d-8473-b26a6c1bf035', question_code: '5.2', reponse_valeur: '3' },
-  { id: 'r107', evaluation_id: 'cd4e9d01-ffb0-461d-8473-b26a6c1bf035', question_code: '5.3', reponse_valeur: '1' },
-  { id: 'r108', evaluation_id: 'cd4e9d01-ffb0-461d-8473-b26a6c1bf035', question_code: '5.4', reponse_valeur: '2' },
-  { id: 'r109', evaluation_id: 'cd4e9d01-ffb0-461d-8473-b26a6c1bf035', question_code: '5.5', reponse_valeur: '2' },
-  { id: 'r110', evaluation_id: 'cd4e9d01-ffb0-461d-8473-b26a6c1bf035', question_code: '5.6', reponse_valeur: '3' },
-  { id: 'r111', evaluation_id: 'cd4e9d01-ffb0-461d-8473-b26a6c1bf035', question_code: '5.7', reponse_valeur: '4' },
-  { id: 'r112', evaluation_id: 'cd4e9d01-ffb0-461d-8473-b26a6c1bf035', question_code: '5.8', reponse_valeur: '2' },
-  { id: 'r113', evaluation_id: 'cd4e9d01-ffb0-461d-8473-b26a6c1bf035', question_code: '5.9', reponse_valeur: '3' },
-  { id: 'r114', evaluation_id: 'cd4e9d01-ffb0-461d-8473-b26a6c1bf035', question_code: '6.1', reponse_valeur: '3' },
-  { id: 'r115', evaluation_id: 'cd4e9d01-ffb0-461d-8473-b26a6c1bf035', question_code: '6.2', reponse_valeur: '3' },
-  { id: 'r116', evaluation_id: 'cd4e9d01-ffb0-461d-8473-b26a6c1bf035', question_code: '6.3', reponse_valeur: '2' },
-  { id: 'r117', evaluation_id: 'cd4e9d01-ffb0-461d-8473-b26a6c1bf035', question_code: '6.4', reponse_valeur: '3' },
-  { id: 'r118', evaluation_id: 'cd4e9d01-ffb0-461d-8473-b26a6c1bf035', question_code: '6.5', reponse_valeur: '2' },
-  { id: 'r119', evaluation_id: 'cd4e9d01-ffb0-461d-8473-b26a6c1bf035', question_code: '6.6', reponse_valeur: '3' },
-  { id: 'r120', evaluation_id: 'cd4e9d01-ffb0-461d-8473-b26a6c1bf035', question_code: '7.1', reponse_valeur: '3' },
-  { id: 'r121', evaluation_id: 'cd4e9d01-ffb0-461d-8473-b26a6c1bf035', question_code: '8.1', reponse_valeur: '2' },
-  { id: 'r122', evaluation_id: 'cd4e9d01-ffb0-461d-8473-b26a6c1bf035', question_code: '8.2', reponse_valeur: '2' },
-  { id: 'r123', evaluation_id: 'cd4e9d01-ffb0-461d-8473-b26a6c1bf035', question_code: '8.3', reponse_valeur: '2' },
-  { id: 'r124', evaluation_id: 'cd4e9d01-ffb0-461d-8473-b26a6c1bf035', question_code: '8.4', reponse_valeur: '3' },
-  { id: 'r125', evaluation_id: 'cd4e9d01-ffb0-461d-8473-b26a6c1bf035', question_code: '8.5', reponse_valeur: '2' },
-  { id: 'r126', evaluation_id: 'cd4e9d01-ffb0-461d-8473-b26a6c1bf035', question_code: '8.6', reponse_valeur: '3' },
-  { id: 'r127', evaluation_id: 'cd4e9d01-ffb0-461d-8473-b26a6c1bf035', question_code: '9.1', reponse_valeur: '2' },
-  { id: 'r128', evaluation_id: 'cd4e9d01-ffb0-461d-8473-b26a6c1bf035', question_code: '9.2', reponse_valeur: '3' },
-  { id: 'r129', evaluation_id: 'cd4e9d01-ffb0-461d-8473-b26a6c1bf035', question_code: '9.3', reponse_valeur: '2' },
-  { id: 'r130', evaluation_id: 'cd4e9d01-ffb0-461d-8473-b26a6c1bf035', question_code: '9.4', reponse_valeur: '3' },
-  { id: 'r131', evaluation_id: 'cd4e9d01-ffb0-461d-8473-b26a6c1bf035', question_code: '9.5', reponse_valeur: '2' },
-  { id: 'r132', evaluation_id: 'cd4e9d01-ffb0-461d-8473-b26a6c1bf035', question_code: '9.6', reponse_valeur: '3' },
-  { id: 'r133', evaluation_id: 'cd4e9d01-ffb0-461d-8473-b26a6c1bf035', question_code: '9.7', reponse_valeur: '2' },
-  { id: 'r134', evaluation_id: 'cd4e9d01-ffb0-461d-8473-b26a6c1bf035', question_code: '10.1', reponse_valeur: '3' },
-  { id: 'r135', evaluation_id: 'cd4e9d01-ffb0-461d-8473-b26a6c1bf035', question_code: '10.2', reponse_valeur: '3' },
-  { id: 'r136', evaluation_id: 'cd4e9d01-ffb0-461d-8473-b26a6c1bf035', question_code: '10.3', reponse_valeur: '2' },
-  { id: 'r137', evaluation_id: 'cd4e9d01-ffb0-461d-8473-b26a6c1bf035', question_code: '10.4', reponse_valeur: '2' },
-  { id: 'r138', evaluation_id: 'cd4e9d01-ffb0-461d-8473-b26a6c1bf035', question_code: '10.5', reponse_valeur: '3' },
-  { id: 'r139', evaluation_id: 'cd4e9d01-ffb0-461d-8473-b26a6c1bf035', question_code: '10.6', reponse_valeur: '2' },
-  { id: 'r140', evaluation_id: 'cd4e9d01-ffb0-461d-8473-b26a6c1bf035', question_code: '11.1', reponse_valeur: '3' },
-  { id: 'r141', evaluation_id: 'cd4e9d01-ffb0-461d-8473-b26a6c1bf035', question_code: '12.1', reponse_valeur: '3' },
-  { id: 'r142', evaluation_id: 'cd4e9d01-ffb0-461d-8473-b26a6c1bf035', question_code: '12.2', reponse_valeur: '2' },
-  { id: 'r143', evaluation_id: 'cd4e9d01-ffb0-461d-8473-b26a6c1bf035', question_code: '13.1', reponse_valeur: '3' },
-  { id: 'r144', evaluation_id: 'cd4e9d01-ffb0-461d-8473-b26a6c1bf035', question_code: '13.2', reponse_valeur: '2' },
-  { id: 'r145', evaluation_id: 'cd4e9d01-ffb0-461d-8473-b26a6c1bf035', question_code: '14.1', reponse_valeur: '2' },
-  { id: 'r146', evaluation_id: 'cd4e9d01-ffb0-461d-8473-b26a6c1bf035', question_code: '15.1', reponse_valeur: '1' }
-];
-
-const SEEDED_MEMBRES_BE: MembreBe[] = [
-  {
-    id: 'm1_1',
-    evaluation_id: '8cb3850b-4171-460d-a0e4-b78f87e6fa56',
-    nom_prenoms: 'M. Mamadou Konaté',
-    genre: 'homme',
-    fonction: 'president',
-    lit_ecrit_francais: true,
-    lit_ecrit_langue_locale: true,
-    niveau_etude: 'superieur',
-    profession: 'Enseignant retraité',
-    formation_coges: true,
-    module_formation: 'Gestion administrative & financière',
-    maitrise_role: 'bonne'
-  },
-  {
-    id: 'm1_2',
-    evaluation_id: '8cb3850b-4171-460d-a0e4-b78f87e6fa56',
-    nom_prenoms: 'Mme Florence Kouadio',
-    genre: 'femme',
-    fonction: 'vice_president',
-    lit_ecrit_francais: true,
-    lit_ecrit_langue_locale: false,
-    niveau_etude: 'secondaire_2nd_cycle',
-    profession: 'Commerçante',
-    formation_coges: true,
-    module_formation: 'Rôle des femmes dans les COGES',
-    maitrise_role: 'bonne'
-  },
-  {
-    id: 'm1_3',
-    evaluation_id: '8cb3850b-4171-460d-a0e4-b78f87e6fa56',
-    nom_prenoms: 'M. Ibrahim Sylla',
-    genre: 'homme',
-    fonction: 'secretaire_general',
-    lit_ecrit_francais: true,
-    lit_ecrit_langue_locale: false,
-    niveau_etude: 'superieur',
-    profession: 'Planteur',
-    formation_coges: true,
-    module_formation: 'Secrétariat et rédaction de PV',
-    maitrise_role: 'bonne'
-  },
-  {
-    id: 'm1_4',
-    evaluation_id: '8cb3850b-4171-460d-a0e4-b78f87e6fa56',
-    nom_prenoms: 'Mlle Aminata Touré',
-    genre: 'femme',
-    fonction: 'eleve',
-    lit_ecrit_francais: true,
-    lit_ecrit_langue_locale: false,
-    niveau_etude: 'primaire',
-    profession: 'Élève CM2',
-    formation_coges: false,
-    maitrise_role: 'bonne'
-  }
-];
-
-const DOCUMENT_NAMES = [
-  "Textes réglementaires",
-  "Règlement intérieur",
-  "Liste actualisée des membres du Bureau Exécutif",
-  "PV de la dernière AG élective",
-  "PV des réunions du Bureau Exécutif",
-  "Liste de présence aux réunions",
-  "PACC",
-  "Budget annuel",
-  "Rapport d'activités",
-  "Rapport financier",
-  "Bilan financier",
-  "Journal de caisse",
-  "Journal de banque",
-  "Registre des biens",
-  "RIB ou document bancaire",
-  "Carnet d'activités et de retrait",
-  "Cahier de visite",
-  "Preuves d'appuis reçus des partenaires",
-  "Documents relatifs aux AGR",
-  "Documents liés aux actions de protection de l'enfant ou de santé scolaire"
-];
-
-function seedPreuves(evalId: string, isFull = true): PreuveDocumentaire[] {
-  return DOCUMENT_NAMES.map((name, index) => {
-    const isCritical = [0, 1, 3, 6, 7, 8, 9, 10, 11, 12, 14, 13].includes(index);
-    const statut = isFull 
-      ? ('disponible_consultee' as const) 
-      : isCritical 
-        ? ('declaree_non_presentee' as const) 
-        : ('non_disponible' as const);
-
-    return {
-      id: `p_${evalId}_${index}`,
-      evaluation_id: evalId,
-      type_preuve: name,
-      statut: statut,
-      commentaire: isFull ? 'Vérifié avec succès.' : 'Déclaré par le président mais pièce physique introuvable.',
-      fichier_path: isFull ? `preuves-erof/${evalId}/document_${index}.pdf` : undefined,
-      fichier_nom_original: isFull ? `preuve_${name.toLowerCase().replace(/\s+/g, '_')}.pdf` : undefined,
-      uploaded_at: isFull ? '2026-07-02T09:15:00Z' : undefined
-    };
-  });
-}
+const SEEDED_MEMBRES_BE: MembreBe[] = [];
 
 // LOCAL DEMO STORAGE SERVICE
 export class LocalDemoService {
@@ -632,66 +266,54 @@ export class LocalDemoService {
     getStoredItem<Coges[]>('coges', PRE_SEEDED_COGES);
     getStoredItem<Campagne[]>('campagnes', PRE_SEEDED_CAMPAGNES);
     getStoredItem<User[]>('users', PRE_SEEDED_USERS);
-    
-    const evals = getStoredItem<Evaluation[]>('evaluations', SEEDED_EVALUATIONS);
-    const reps = getStoredItem<EvaluationReponse[]>('reponses', SEEDED_REPONSES);
-    const members = getStoredItem<MembreBe[]>('membres_be', SEEDED_MEMBRES_BE);
-    
-    const savedPreuves = getStoredItem<PreuveDocumentaire[]>('preuves', []);
-    if (savedPreuves.length === 0) {
-      const allPreuves = [
-        ...seedPreuves('8cb3850b-4171-460d-a0e4-b78f87e6fa56', true),
-        ...seedPreuves('cd4e9d01-ffb0-461d-8473-b26a6c1bf035', false),
-        ...seedPreuves('a062828b-b6fb-45eb-92f7-b7e3e2d6fa21', false)
-      ];
-      setStoredItem<PreuveDocumentaire[]>('preuves', allPreuves);
+
+    getStoredItem<Evaluation[]>('evaluations', SEEDED_EVALUATIONS);
+    getStoredItem<EvaluationReponse[]>('reponses', SEEDED_REPONSES);
+    getStoredItem<MembreBe[]>('membres_be', SEEDED_MEMBRES_BE);
+    getStoredItem<PreuveDocumentaire[]>('preuves', []);
+    getStoredItem<EvaluationScore[]>('scores', []);
+    getStoredItem<EquipeEvaluation[]>('equipes', []);
+    getStoredItem<Recommandation[]>('recommandations', []);
+    getStoredItem<AuditLog[]>('audit_logs', []);
+  }
+
+  static async registerEnqueteur(input: {
+    email: string;
+    nom: string;
+    prenom: string;
+    drena_id: string;
+    iepp_id?: string;
+  }): Promise<{ success: boolean; user?: User; error?: string }> {
+    const email = input.email.trim().toLowerCase();
+    if (!email) return { success: false, error: 'L\'adresse e-mail est obligatoire.' };
+    if (!input.nom.trim() || !input.prenom.trim()) return { success: false, error: 'Le nom et le prénom sont obligatoires.' };
+    if (!input.drena_id) return { success: false, error: 'Veuillez sélectionner votre DRENA de rattachement.' };
+
+    if (input.iepp_id) {
+      const iepps = getStoredItem<Iepp[]>('iepps', []);
+      const iepp = iepps.find(i => i.id === input.iepp_id);
+      if (!iepp || iepp.drena_id !== input.drena_id) {
+        return { success: false, error: 'L\'IEPP sélectionnée ne correspond pas à la DRENA choisie.' };
+      }
     }
 
-    const savedScores = getStoredItem<EvaluationScore[]>('scores', []);
-    if (savedScores.length === 0) {
-      const initialScores = [
-        computeEvaluationScores('8cb3850b-4171-460d-a0e4-b78f87e6fa56', reps.filter(r => r.evaluation_id === '8cb3850b-4171-460d-a0e4-b78f87e6fa56'), members.filter(m => m.evaluation_id === '8cb3850b-4171-460d-a0e4-b78f87e6fa56'), seedPreuves('8cb3850b-4171-460d-a0e4-b78f87e6fa56', true)),
-        computeEvaluationScores('cd4e9d01-ffb0-461d-8473-b26a6c1bf035', reps.filter(r => r.evaluation_id === 'cd4e9d01-ffb0-461d-8473-b26a6c1bf035'), [], seedPreuves('cd4e9d01-ffb0-461d-8473-b26a6c1bf035', false))
-      ];
-      setStoredItem<EvaluationScore[]>('scores', initialScores);
+    const users = getStoredItem<User[]>('users', []);
+    if (users.some(u => u.email.toLowerCase() === email)) {
+      return { success: false, error: 'Un compte existe déjà avec cette adresse e-mail.' };
     }
 
-    getStoredItem<EquipeEvaluation[]>('equipes', [
-      { id: 'eq_1', evaluation_id: '8cb3850b-4171-460d-a0e4-b78f87e6fa56', nom_prenoms: 'Jean-Pierre Touré', fonction_structure: 'Enquêteur Principal / DAPS-COGES' },
-      { id: 'eq_2', evaluation_id: '8cb3850b-4171-460d-a0e4-b78f87e6fa56', nom_prenoms: 'Awa Diomandé', fonction_structure: 'Superviseur National' }
-    ]);
-
-    getStoredItem<Recommandation[]>('recommandations', [
-      {
-        id: 'rec_demo_01',
-        evaluation_id: '8cb3850b-4171-460d-a0e4-b78f87e6fa56',
-        forces: '1. Bureau très actif et dynamique\n2. Mobilisation communautaire exceptionnelle\n3. Clarté des rapports financiers',
-        faiblesses: '1. Faible participation des élèves dans les prises de décision\n2. Manque de formation sur les modules de résilience\n3. Salles de classe encore surchargées',
-        difficultes: 'Difficulté à mobiliser des appuis extérieurs hors cotisations locales.',
-        actions_urgentes: '1. Organiser une séance de renforcement de capacités des membres sur la planification.\n2. Renforcer le pouvoir de décision du comité élèves.',
-        appuis_attendus: 'Plaidoyer auprès de la Mairie pour l\'obtention d\'un budget d\'entretien.',
-        recommandations_prioritaires: '1. Accompagner le COGES dans le démarrage de son AGR agricole.\n2. Équiper la bibliothèque en livres.'
-      }
-    ]);
-
-    getStoredItem<AuditLog[]>('audit_logs', [
-      {
-        id: 'log_01',
-        user_id: 'user_enqueteur_01',
-        action: 'Création de l\'évaluation',
-        table_cible: 'evaluations',
-        ligne_id: '8cb3850b-4171-460d-a0e4-b78f87e6fa56',
-        created_at: '2026-07-01T08:00:00Z'
-      },
-      {
-        id: 'log_02',
-        user_id: 'user_admin',
-        action: 'Validation finale',
-        table_cible: 'evaluations',
-        ligne_id: '8cb3850b-4171-460d-a0e4-b78f87e6fa56',
-        created_at: '2026-07-03T14:30:00Z'
-      }
-    ]);
+    const newUser: User = {
+      id: `enqueteur_${Date.now()}`,
+      email,
+      nom: input.nom.trim(),
+      prenom: input.prenom.trim(),
+      role: 'enqueteur',
+      drena_id: input.drena_id,
+      iepp_id: input.iepp_id || undefined,
+      actif: true
+    };
+    setStoredItem<User[]>('users', [...users, newUser]);
+    return { success: true, user: newUser };
   }
 
   static async getDrenas(): Promise<Drena[]> {
@@ -715,6 +337,60 @@ export class LocalDemoService {
 
   static async getCampagnes(): Promise<Campagne[]> {
     return getStoredItem<Campagne[]>('campagnes', []);
+  }
+
+  static async createCampagne(input: {
+    nom: string;
+    annee_scolaire: string;
+    date_debut: string;
+    date_fin?: string;
+    statut: CampagneStatut;
+  }): Promise<{ success: boolean; campagne?: Campagne; error?: string }> {
+    const campagnes = getStoredItem<Campagne[]>('campagnes', []);
+    const now = new Date().toISOString();
+    const newCampagne: Campagne = {
+      id: `campagne_${Date.now()}`,
+      nom: input.nom.trim(),
+      annee_scolaire: input.annee_scolaire.trim(),
+      date_debut: input.date_debut,
+      date_fin: input.date_fin || undefined,
+      statut: input.statut,
+      created_at: now,
+      updated_at: now
+    };
+
+    let updated = [...campagnes, newCampagne];
+    if (newCampagne.statut === 'ouverte') {
+      updated = updated.map(c => c.id === newCampagne.id ? c : { ...c, statut: 'fermee' as CampagneStatut });
+    }
+    setStoredItem<Campagne[]>('campagnes', updated);
+    return { success: true, campagne: newCampagne };
+  }
+
+  static async updateCampagne(
+    id: string,
+    updates: Partial<Pick<Campagne, 'nom' | 'annee_scolaire' | 'date_debut' | 'date_fin' | 'statut'>>
+  ): Promise<{ success: boolean; error?: string }> {
+    const campagnes = getStoredItem<Campagne[]>('campagnes', []);
+    const index = campagnes.findIndex(c => c.id === id);
+    if (index < 0) return { success: false, error: 'Campagne introuvable.' };
+
+    let updated = campagnes.map(c => c.id === id ? { ...c, ...updates, updated_at: new Date().toISOString() } : c);
+    if (updates.statut === 'ouverte') {
+      updated = updated.map(c => c.id === id ? c : { ...c, statut: 'fermee' as CampagneStatut });
+    }
+    setStoredItem<Campagne[]>('campagnes', updated);
+    return { success: true };
+  }
+
+  static async deleteCampagne(id: string): Promise<{ success: boolean; error?: string }> {
+    const evals = getStoredItem<Evaluation[]>('evaluations', []);
+    if (evals.some(e => e.campagne_id === id)) {
+      return { success: false, error: 'Impossible de supprimer : des évaluations sont déjà rattachées à cette campagne.' };
+    }
+    const campagnes = getStoredItem<Campagne[]>('campagnes', []);
+    setStoredItem<Campagne[]>('campagnes', campagnes.filter(c => c.id !== id));
+    return { success: true };
   }
 
   static async getEvaluations(user: User): Promise<(Evaluation & { etablissement_nom?: string; drena_nom?: string; iepp_nom?: string; score_global?: number; classification?: string; scores?: any })[]> {
@@ -742,6 +418,16 @@ export class LocalDemoService {
     });
 
     if (user.role === 'enqueteur') {
+      if (user.iepp_id) {
+        // Enquêteur rattaché à une IEPP : ne voit que les saisies de cette IEPP.
+        const ieppEtabs = etabs.filter(e => e.iepp_id === user.iepp_id).map(e => e.id);
+        return rawEvals.filter(e => ieppEtabs.includes(e.etablissement_id));
+      } else if (user.drena_id) {
+        // Enquêteur rattaché à une DRENA : voit les saisies de toutes les IEPP de cette DRENA.
+        const drenaIepps = iepps.filter(i => i.drena_id === user.drena_id).map(i => i.id);
+        const drenaEtabs = etabs.filter(e => drenaIepps.includes(e.iepp_id)).map(e => e.id);
+        return rawEvals.filter(e => drenaEtabs.includes(e.etablissement_id));
+      }
       return rawEvals.filter(e => e.enqueteur_id === user.id);
     } else if (user.role === 'superviseur_iepp') {
       const userIeppId = user.iepp_id;
@@ -813,7 +499,9 @@ export class LocalDemoService {
     equipes: EquipeEvaluation[],
     recommandations: Partial<Recommandation> | null,
     preuves: PreuveDocumentaire[],
-    userId: string
+    userId: string,
+    etablissementUpdates?: Partial<Etablissement>,
+    cogesUpdates?: Partial<Coges>
   ): Promise<{ success: boolean; error?: string }> {
     const now = new Date().toISOString();
 
@@ -823,6 +511,40 @@ export class LocalDemoService {
       if (currentStatut !== 'brouillon' && currentStatut !== 'en_revision') {
         return { success: false, error: 'Modification impossible: l\'évaluation n\'est plus modifiable (statut: ' + currentStatut + ').' };
       }
+    }
+
+    const etabResult = buildLinkedUpdatePayload<Etablissement>(evaluation.etablissement_id, etablissementUpdates, "de l'établissement");
+    if (etabResult.error) return { success: false, error: etabResult.error };
+    const cogesResult = buildLinkedUpdatePayload<Coges>(evaluation.coges_id, cogesUpdates, 'du COGES');
+    if (cogesResult.error) return { success: false, error: cogesResult.error };
+    if (cogesResult.payload && evaluation.etablissement_id) {
+      cogesResult.payload.etablissement_id = evaluation.etablissement_id;
+    }
+    const cogesPayload = cogesResult.payload || (
+      evaluation.coges_id && evaluation.etablissement_id
+        ? { id: evaluation.coges_id, etablissement_id: evaluation.etablissement_id }
+        : null
+    );
+
+    if (etabResult.payload) {
+      const etabs = getStoredItem<Etablissement[]>('etablissements', []);
+      const etabIndex = etabs.findIndex(e => e.id === etabResult.payload!.id);
+      if (etabIndex >= 0) {
+        etabs[etabIndex] = { ...etabs[etabIndex], ...etabResult.payload } as Etablissement;
+      } else {
+        etabs.push(etabResult.payload as Etablissement);
+      }
+      setStoredItem<Etablissement[]>('etablissements', etabs);
+    }
+    if (cogesPayload) {
+      const cogesList = getStoredItem<Coges[]>('coges', []);
+      const cogesIndex = cogesList.findIndex(c => c.id === cogesPayload.id);
+      if (cogesIndex >= 0) {
+        cogesList[cogesIndex] = { ...cogesList[cogesIndex], ...cogesPayload } as Coges;
+      } else {
+        cogesList.push(cogesPayload as Coges);
+      }
+      setStoredItem<Coges[]>('coges', cogesList);
     }
 
     const evals = getStoredItem<Evaluation[]>('evaluations', []);
@@ -897,69 +619,22 @@ export class LocalDemoService {
       return { success: false, errors: ['Évaluation introuvable.'] };
     }
 
-    const { evaluation, reponses, membresBe, preuves } = details;
-    const errors: string[] = [];
+    const { evaluation, reponses, membresBe, equipes, recommandations, preuves } = details;
 
-    if (!evaluation.president_nom) errors.push('Le nom du Président du Bureau Exécutif est obligatoire.');
-    if (!evaluation.president_contact || !/^[0-9]{10}$/.test(evaluation.president_contact)) {
-      errors.push('Le numéro de téléphone du Président doit comporter exactement 10 chiffres.');
-    }
-    if (!evaluation.conseiller_nom) errors.push('Le nom du Conseiller chargé des COGES est obligatoire.');
-    if (!evaluation.conseiller_contact || !/^[0-9]{10}$/.test(evaluation.conseiller_contact)) {
-      errors.push('Le numéro de téléphone du Conseiller doit comporter exactement 10 chiffres.');
-    }
-    if (!evaluation.conseiller_email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(evaluation.conseiller_email)) {
-      errors.push('L\'adresse e-mail du Conseiller est invalide.');
-    }
-
-    if (evaluation.effectif_total !== ((evaluation.effectif_filles || 0) + (evaluation.effectif_garcons || 0))) {
-      errors.push(`Incohérence effectif: Effectif total (${evaluation.effectif_total}) doit être égal à Filles (${evaluation.effectif_filles || 0}) + Garçons (${evaluation.effectif_garcons || 0}).`);
-    }
-
-    const expectedCodes = [
-      '3.2', '4.1', '4.2', '4.3', '5.1', '5.2', '5.4', '5.6', '5.7', '5.8', '5.9',
-      '6.1', '6.2', '6.3', '6.4', '6.5', '6.6', '7.1', '8.1', '8.2', '8.3', '8.4', '8.5', '8.6',
-      '9.1', '9.2', '9.3', '9.4', '9.5', '9.6', '9.7', '10.1', '10.2', '10.3', '10.4', '10.5', '10.6',
-      '11.1', '12.1', '12.2', '13.1', '13.2', '14.1', '15.1'
-    ];
-
-    const answerMap = new Map<string, string>();
-    reponses.forEach(r => answerMap.set(r.question_code, r.reponse_valeur));
-
-    expectedCodes.forEach(code => {
-      if (!answerMap.has(code) || !answerMap.get(code)) {
-        errors.push(`La question ${code} est obligatoire et n'a pas été renseignée.`);
-      }
+    const reponsesMap: Record<string, number> = {};
+    reponses.forEach(r => {
+      if (r.valeur_numerique !== null && r.valeur_numerique !== undefined) reponsesMap[r.question_code] = r.valeur_numerique;
     });
 
-    const criticalPreuvesRules = [
-      { code: '3.2', docName: 'Textes réglementaires' },
-      { code: '5.1', docName: 'Règlement intérieur' },
-      { code: '5.7', docName: 'PV de la dernière AG élective' },
-      { code: '9.1', docName: 'PACC' },
-      { code: '9.2', docName: 'Budget annuel' },
-      { code: '9.4', docName: "Rapport d'activités" },
-      { code: '9.5', docName: 'Rapport financier' },
-      { code: '9.6', docName: 'Bilan financier' },
-      { code: '8.2', docName: 'Journal de caisse' },
-      { code: '8.3', docName: 'Journal de banque' },
-      { code: '8.1', docName: 'RIB ou document bancaire' },
-      { code: '8.4', docName: 'Registre des biens' }
-    ];
-
-    criticalPreuvesRules.forEach(rule => {
-      const rating = parseInt(answerMap.get(rule.code) || '0', 10);
-      if (rating >= 4) {
-        const pDoc = preuves.find(p => p.type_preuve === rule.docName);
-        const hasValidDoc = pDoc && pDoc.statut === 'disponible_consultee';
-        const hasExplanation = pDoc && pDoc.commentaire && pDoc.commentaire.trim().length > 5;
-        
-        if (!hasValidDoc && !hasExplanation) {
-          errors.push(
-            `Preuve critique requise: La note de la question ${rule.code} vaut ${rating} (≥ 4), vous devez obligatoirement fournir le document "${rule.docName}" au statut "Disponible et consultée" dans la Section 17, ou saisir une explication justificative détaillée dans le commentaire de la preuve.`
-          );
-        }
-      }
+    const errors = validateEvaluationForSubmission({
+      evaluation,
+      etablissement: evaluation.etablissement || {},
+      coges: evaluation.coges || {},
+      reponses: reponsesMap,
+      membresBe,
+      equipes,
+      recommandations,
+      preuves
     });
 
     if (errors.length > 0) {
@@ -973,8 +648,9 @@ export class LocalDemoService {
     if (evIndex >= 0) {
       evals[evIndex] = {
         ...evals[evIndex],
-        statut: 'soumis',
+        statut: 'valide',
         submitted_at: now,
+        validated_at: now,
         updated_at: now
       };
       setStoredItem<Evaluation[]>('evaluations', evals);
@@ -989,7 +665,7 @@ export class LocalDemoService {
     }
     setStoredItem<EvaluationScore[]>('scores', allScores);
 
-    this.addAuditLog(userId, 'Soumission définitive', 'evaluations', id);
+    this.addAuditLog(userId, 'Soumission et validation automatique (contrôles de conformité réussis)', 'evaluations', id);
     return { success: true };
   }
 
@@ -1047,6 +723,18 @@ export class LocalDemoService {
     };
   }
 
+  static async getPreuveFileUrl(
+    filePath: string
+  ): Promise<{ success: boolean; url?: string; error?: string }> {
+    if (!filePath) return { success: false, error: 'Aucun fichier associÃ© Ã  cette preuve.' };
+    if (/^https?:\/\//i.test(filePath)) return { success: true, url: filePath };
+
+    return {
+      success: false,
+      error: 'La consultation des fichiers locaux de dÃ©monstration n\'est pas disponible.'
+    };
+  }
+
   static addAuditLog(
     userId: string,
     action: string,
@@ -1073,10 +761,147 @@ export class LocalDemoService {
   static async getAuditLogs(): Promise<AuditLog[]> {
     return getStoredItem<AuditLog[]>('audit_logs', []);
   }
+
+  static async getAllUsers(): Promise<User[]> {
+    return getStoredItem<User[]>('users', []);
+  }
+
+  static async createUserAdmin(input: {
+    email: string;
+    password: string;
+    nom: string;
+    prenom: string;
+    role: UserRole;
+    drena_id?: string;
+    iepp_id?: string;
+    telephone?: string;
+  }): Promise<{ success: boolean; user?: User; error?: string }> {
+    const email = input.email.trim().toLowerCase();
+    if (!email) return { success: false, error: "L'adresse e-mail est obligatoire." };
+    if (!input.nom.trim() || !input.prenom.trim()) return { success: false, error: 'Le nom et le prénom sont obligatoires.' };
+    if ((input.role === 'superviseur_drena' || input.role === 'superviseur_iepp' || input.role === 'enqueteur') && !input.drena_id) {
+      return { success: false, error: 'La DRENA de rattachement est obligatoire pour ce rôle.' };
+    }
+    if (input.role === 'superviseur_iepp' && !input.iepp_id) {
+      return { success: false, error: "L'IEPP de rattachement est obligatoire pour ce rôle." };
+    }
+
+    const users = getStoredItem<User[]>('users', []);
+    if (users.some(u => u.email.toLowerCase() === email)) {
+      return { success: false, error: 'Un compte existe déjà avec cette adresse e-mail.' };
+    }
+
+    const newUser: User = {
+      id: `user_${Date.now()}`,
+      email,
+      nom: input.nom.trim(),
+      prenom: input.prenom.trim(),
+      role: input.role,
+      drena_id: input.drena_id || undefined,
+      iepp_id: input.iepp_id || undefined,
+      telephone: input.telephone || undefined,
+      actif: true
+    };
+    setStoredItem<User[]>('users', [...users, newUser]);
+    return { success: true, user: newUser };
+  }
+
+  static async updateUserProfile(
+    id: string,
+    updates: Partial<Pick<User, 'nom' | 'prenom' | 'role' | 'telephone' | 'actif'>> & { drena_id?: string | null; iepp_id?: string | null }
+  ): Promise<{ success: boolean; error?: string }> {
+    const users = getStoredItem<User[]>('users', []);
+    const index = users.findIndex(u => u.id === id);
+    if (index < 0) return { success: false, error: 'Utilisateur introuvable.' };
+    // Explicit null means "clear the field" (e.g. role no longer needs a DRENA/IEPP rattachement);
+    // it must not be conflated with undefined, which would otherwise leave the old value in place.
+    const normalized = {
+      ...updates,
+      drena_id: updates.drena_id === null ? undefined : updates.drena_id,
+      iepp_id: updates.iepp_id === null ? undefined : updates.iepp_id
+    };
+    users[index] = { ...users[index], ...normalized };
+    setStoredItem<User[]>('users', users);
+    return { success: true };
+  }
+
+  static async deleteUserProfile(id: string): Promise<{ success: boolean; error?: string }> {
+    const evals = getStoredItem<Evaluation[]>('evaluations', []);
+    if (evals.some(e => e.enqueteur_id === id)) {
+      return { success: false, error: 'Impossible de supprimer : des évaluations sont rattachées à cet utilisateur. Désactivez-le plutôt.' };
+    }
+    const users = getStoredItem<User[]>('users', []);
+    setStoredItem<User[]>('users', users.filter(u => u.id !== id));
+    return { success: true };
+  }
+
+  static async resetUserPassword(_id: string, _newPassword: string): Promise<{ success: boolean; error?: string }> {
+    return { success: false, error: "La réinitialisation de mot de passe n'est disponible qu'en mode Supabase (production)." };
+  }
 }
 
 // REAL SUPABASE PRODUCTION STORAGE SERVICE
 export class SupabaseDataService {
+  static async registerEnqueteur(input: {
+    email: string;
+    password: string;
+    nom: string;
+    prenom: string;
+    drena_id: string;
+    iepp_id?: string;
+  }): Promise<{ success: boolean; user?: User; error?: string; requiresEmailConfirmation?: boolean }> {
+    if (input.iepp_id) {
+      const { data: iepp, error: ieppError } = await supabase!
+        .from('iepps')
+        .select('*')
+        .eq('id', input.iepp_id)
+        .maybeSingle();
+      if (ieppError || !iepp || iepp.drena_id !== input.drena_id) {
+        return { success: false, error: 'L\'IEPP sélectionnée ne correspond pas à la DRENA choisie.' };
+      }
+    }
+
+    // The profile row in public.users is provisioned server-side by the
+    // on_auth_user_created_enqueteur trigger (RLS only allows admin_national to
+    // write to that table directly), fed by this signup metadata.
+    const { data, error } = await supabase!.auth.signUp({
+      email: input.email.trim(),
+      password: input.password,
+      options: {
+        data: {
+          registration_type: 'enqueteur',
+          nom: input.nom.trim(),
+          prenom: input.prenom.trim(),
+          drena_id: input.drena_id,
+          iepp_id: input.iepp_id || null
+        }
+      }
+    });
+    if (error) return { success: false, error: error.message };
+    if (!data.user) {
+      return { success: false, error: 'Inscription refusée : aucun utilisateur renvoyé par le service d\'authentification.' };
+    }
+
+    const newUser: User = {
+      id: data.user.id,
+      email: input.email.trim(),
+      nom: input.nom.trim(),
+      prenom: input.prenom.trim(),
+      role: 'enqueteur',
+      drena_id: input.drena_id,
+      iepp_id: input.iepp_id || undefined,
+      actif: true
+    };
+
+    // Without an active session (email confirmation required), the profile
+    // exists in the database but the client can't be logged in yet.
+    if (!data.session) {
+      return { success: true, user: newUser, requiresEmailConfirmation: true };
+    }
+
+    return { success: true, user: newUser };
+  }
+
   static async getDrenas(): Promise<Drena[]> {
     const { data, error } = await supabase!
       .from('drenas')
@@ -1119,9 +944,78 @@ export class SupabaseDataService {
   static async getCampagnes(): Promise<Campagne[]> {
     const { data, error } = await supabase!
       .from('campagnes')
-      .select('*');
+      .select('*')
+      .order('date_debut', { ascending: false });
     if (error) throw error;
     return data || [];
+  }
+
+  static async createCampagne(input: {
+    nom: string;
+    annee_scolaire: string;
+    date_debut: string;
+    date_fin?: string;
+    statut: CampagneStatut;
+  }): Promise<{ success: boolean; campagne?: Campagne; error?: string }> {
+    if (input.statut === 'ouverte') {
+      const { error: closeErr } = await supabase!
+        .from('campagnes')
+        .update({ statut: 'fermee' })
+        .eq('statut', 'ouverte');
+      if (closeErr) return { success: false, error: 'Erreur lors de la clôture des campagnes existantes: ' + closeErr.message };
+    }
+
+    // Generated client-side (rather than relying on .select() to read back
+    // the DB-assigned id) so the insert can go out with Prefer: return=minimal
+    // — see the comment in supabaseClient.ts for why representation is avoided.
+    const newCampagne: Campagne = {
+      id: crypto.randomUUID(),
+      nom: input.nom.trim(),
+      annee_scolaire: input.annee_scolaire.trim(),
+      date_debut: input.date_debut,
+      date_fin: input.date_fin || undefined,
+      statut: input.statut
+    };
+    const { error } = await supabase!.from('campagnes').insert({
+      id: newCampagne.id,
+      nom: newCampagne.nom,
+      annee_scolaire: newCampagne.annee_scolaire,
+      date_debut: newCampagne.date_debut,
+      date_fin: newCampagne.date_fin || null,
+      statut: newCampagne.statut
+    });
+    if (error) return { success: false, error: 'Erreur lors de la création de la campagne: ' + error.message };
+    return { success: true, campagne: newCampagne };
+  }
+
+  static async updateCampagne(
+    id: string,
+    updates: Partial<Pick<Campagne, 'nom' | 'annee_scolaire' | 'date_debut' | 'date_fin' | 'statut'>>
+  ): Promise<{ success: boolean; error?: string }> {
+    if (updates.statut === 'ouverte') {
+      const { error: closeErr } = await supabase!
+        .from('campagnes')
+        .update({ statut: 'fermee' })
+        .eq('statut', 'ouverte')
+        .neq('id', id);
+      if (closeErr) return { success: false, error: 'Erreur lors de la clôture des campagnes existantes: ' + closeErr.message };
+    }
+
+    const { error } = await supabase!
+      .from('campagnes')
+      .update(updates)
+      .eq('id', id);
+    if (error) return { success: false, error: 'Erreur lors de la mise à jour de la campagne: ' + error.message };
+    return { success: true };
+  }
+
+  static async deleteCampagne(id: string): Promise<{ success: boolean; error?: string }> {
+    const { error } = await supabase!
+      .from('campagnes')
+      .delete()
+      .eq('id', id);
+    if (error) return { success: false, error: 'Suppression impossible (des évaluations sont probablement rattachées à cette campagne): ' + error.message };
+    return { success: true };
   }
 
   static async getEvaluations(user: User): Promise<(Evaluation & { etablissement_nom?: string; drena_nom?: string; iepp_nom?: string; score_global?: number; classification?: string; scores?: any })[]> {
@@ -1239,7 +1133,9 @@ export class SupabaseDataService {
     equipes: EquipeEvaluation[],
     recommandations: Partial<Recommandation> | null,
     preuves: PreuveDocumentaire[],
-    userId: string
+    userId: string,
+    etablissementUpdates?: Partial<Etablissement>,
+    cogesUpdates?: Partial<Coges>
   ): Promise<{ success: boolean; error?: string }> {
     const now = new Date().toISOString();
 
@@ -1251,8 +1147,36 @@ export class SupabaseDataService {
       }
     }
 
-    // Save core evaluation
-    const { error: evErr } = await supabase!.from('evaluations').upsert({
+    const etabResult = buildLinkedUpdatePayload<Etablissement>(evaluation.etablissement_id, etablissementUpdates, "de l'établissement");
+    if (etabResult.error) return { success: false, error: etabResult.error };
+    const cogesResult = buildLinkedUpdatePayload<Coges>(evaluation.coges_id, cogesUpdates, 'du COGES');
+    if (cogesResult.error) return { success: false, error: cogesResult.error };
+    if (cogesResult.payload && evaluation.etablissement_id) {
+      cogesResult.payload.etablissement_id = evaluation.etablissement_id;
+    }
+    const cogesPayload = cogesResult.payload || (
+      evaluation.coges_id && evaluation.etablissement_id
+        ? { id: evaluation.coges_id, etablissement_id: evaluation.etablissement_id }
+        : null
+    );
+
+    if (etabResult.payload) {
+      const { error: etabErr } = await supabase!.from('etablissements').upsert(etabResult.payload);
+      if (etabErr) return { success: false, error: "Erreur de sauvegarde de l'établissement: " + etabErr.message };
+    }
+    if (cogesPayload) {
+      const { error: cogesErr } = await supabase!.from('coges').upsert(cogesPayload);
+      if (cogesErr) return { success: false, error: 'Erreur de sauvegarde du COGES: ' + cogesErr.message };
+    }
+
+    // Save core evaluation. Deliberately INSERT for a brand-new evaluation
+    // rather than upsert(): upsert compiles to INSERT ... ON CONFLICT DO
+    // UPDATE, and Postgres requires the UPDATE policy to also hold for that
+    // statement shape even when there's no actual conflict. evaluation_editable()
+    // only matches existing brouillon/en_revision rows, so it's always false
+    // for a row that doesn't exist yet — every first save would be rejected
+    // by RLS. Once the row exists, a plain update() is unambiguous anyway.
+    const evaluationRow = {
       id: evaluation.id,
       etablissement_id: evaluation.etablissement_id,
       coges_id: evaluation.coges_id,
@@ -1273,7 +1197,10 @@ export class SupabaseDataService {
       created_by: evaluation.created_by || userId,
       created_at: evaluation.created_at || now,
       updated_at: now
-    });
+    };
+    const { error: evErr } = existingDetails
+      ? await supabase!.from('evaluations').update(evaluationRow).eq('id', evaluation.id)
+      : await supabase!.from('evaluations').insert(evaluationRow);
     if (evErr) return { success: false, error: 'Erreur de sauvegarde d\'évaluation: ' + evErr.message };
 
     // Batch upserts of related entities
@@ -1322,69 +1249,22 @@ export class SupabaseDataService {
       return { success: false, errors: ['Évaluation introuvable.'] };
     }
 
-    const { evaluation, reponses, membresBe, preuves } = details;
-    const errors: string[] = [];
+    const { evaluation, reponses, membresBe, equipes, recommandations, preuves } = details;
 
-    if (!evaluation.president_nom) errors.push('Le nom du Président du Bureau Exécutif est obligatoire.');
-    if (!evaluation.president_contact || !/^[0-9]{10}$/.test(evaluation.president_contact)) {
-      errors.push('Le numéro de téléphone du Président doit comporter exactement 10 chiffres.');
-    }
-    if (!evaluation.conseiller_nom) errors.push('Le nom du Conseiller chargé des COGES est obligatoire.');
-    if (!evaluation.conseiller_contact || !/^[0-9]{10}$/.test(evaluation.conseiller_contact)) {
-      errors.push('Le numéro de téléphone du Conseiller doit comporter exactement 10 chiffres.');
-    }
-    if (!evaluation.conseiller_email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(evaluation.conseiller_email)) {
-      errors.push('L\'adresse e-mail du Conseiller est invalide.');
-    }
-
-    if (evaluation.effectif_total !== ((evaluation.effectif_filles || 0) + (evaluation.effectif_garcons || 0))) {
-      errors.push(`Incohérence effectif: Effectif total (${evaluation.effectif_total}) doit être égal à Filles (${evaluation.effectif_filles || 0}) + Garçons (${evaluation.effectif_garcons || 0}).`);
-    }
-
-    const expectedCodes = [
-      '3.2', '4.1', '4.2', '4.3', '5.1', '5.2', '5.4', '5.6', '5.7', '5.8', '5.9',
-      '6.1', '6.2', '6.3', '6.4', '6.5', '6.6', '7.1', '8.1', '8.2', '8.3', '8.4', '8.5', '8.6',
-      '9.1', '9.2', '9.3', '9.4', '9.5', '9.6', '9.7', '10.1', '10.2', '10.3', '10.4', '10.5', '10.6',
-      '11.1', '12.1', '12.2', '13.1', '13.2', '14.1', '15.1'
-    ];
-
-    const answerMap = new Map<string, string>();
-    reponses.forEach(r => answerMap.set(r.question_code, r.reponse_valeur));
-
-    expectedCodes.forEach(code => {
-      if (!answerMap.has(code) || !answerMap.get(code)) {
-        errors.push(`La question ${code} est obligatoire et n'a pas été renseignée.`);
-      }
+    const reponsesMap: Record<string, number> = {};
+    reponses.forEach(r => {
+      if (r.valeur_numerique !== null && r.valeur_numerique !== undefined) reponsesMap[r.question_code] = r.valeur_numerique;
     });
 
-    const criticalPreuvesRules = [
-      { code: '3.2', docName: 'Textes réglementaires' },
-      { code: '5.1', docName: 'Règlement intérieur' },
-      { code: '5.7', docName: 'PV de la dernière AG élective' },
-      { code: '9.1', docName: 'PACC' },
-      { code: '9.2', docName: 'Budget annuel' },
-      { code: '9.4', docName: "Rapport d'activités" },
-      { code: '9.5', docName: 'Rapport financier' },
-      { code: '9.6', docName: 'Bilan financier' },
-      { code: '8.2', docName: 'Journal de caisse' },
-      { code: '8.3', docName: 'Journal de banque' },
-      { code: '8.1', docName: 'RIB ou document bancaire' },
-      { code: '8.4', docName: 'Registre des biens' }
-    ];
-
-    criticalPreuvesRules.forEach(rule => {
-      const rating = parseInt(answerMap.get(rule.code) || '0', 10);
-      if (rating >= 4) {
-        const pDoc = preuves.find(p => p.type_preuve === rule.docName);
-        const hasValidDoc = pDoc && pDoc.statut === 'disponible_consultee';
-        const hasExplanation = pDoc && pDoc.commentaire && pDoc.commentaire.trim().length > 5;
-        
-        if (!hasValidDoc && !hasExplanation) {
-          errors.push(
-            `Preuve critique requise: La note de la question ${rule.code} vaut ${rating} (≥ 4), vous devez obligatoirement fournir le document "${rule.docName}" au statut "Disponible et consultée" dans la Section 17, ou saisir une explication justificative détaillée dans le commentaire de la preuve.`
-          );
-        }
-      }
+    const errors = validateEvaluationForSubmission({
+      evaluation,
+      etablissement: evaluation.etablissement || {},
+      coges: evaluation.coges || {},
+      reponses: reponsesMap,
+      membresBe,
+      equipes,
+      recommandations,
+      preuves
     });
 
     if (errors.length > 0) {
@@ -1394,8 +1274,9 @@ export class SupabaseDataService {
     const { error: evErr } = await supabase!
       .from('evaluations')
       .update({
-        statut: 'soumis',
+        statut: 'valide',
         submitted_at: now,
+        validated_at: now,
         updated_at: now
       })
       .eq('id', id);
@@ -1410,16 +1291,29 @@ export class SupabaseDataService {
       .maybeSingle();
 
     if (!officialScore) {
-      // Calculate and save preview score since no database-side calculation was found
-      const finalScore = computeEvaluationScores(id, reponses, membresBe, preuves);
-      const { error: scoreErr } = await supabase!.from('evaluation_scores').upsert(finalScore);
+      // Calculate and save preview score since no database-side calculation was found.
+      // Deliberately insert() rather than upsert(): upsert compiles to INSERT ... ON
+      // CONFLICT DO UPDATE, which requires the UPDATE RLS policy to hold too even
+      // though there's no actual conflict here (same reasoning as the evaluations
+      // insert above) — the owning enqueteur only has an INSERT policy for their
+      // own evaluation's score, not UPDATE, so upsert() would be silently rejected.
+      const computedScore = computeEvaluationScores(id, reponses, membresBe, preuves);
+      const finalScore = {
+        id: crypto.randomUUID(),
+        evaluation_id: computedScore.evaluation_id,
+        score_global: computedScore.score_global,
+        classification: computedScore.classification,
+        taux_disponibilite_preuves: computedScore.taux_disponibilite_preuves,
+        axes_faibles: computedScore.axes_faibles
+      };
+      const { error: scoreErr } = await supabase!.from('evaluation_scores').insert(finalScore);
       if (scoreErr) {
         console.warn('Scoring trigger may be handled natively in database. score_save_warning : ', scoreErr.message);
       }
     }
 
     try {
-      await this.addAuditLog(userId, 'Soumission définitive', 'evaluations', id, evaluation, { ...evaluation, statut: 'soumis', submitted_at: now });
+      await this.addAuditLog(userId, 'Soumission et validation automatique (contrôles de conformité réussis)', 'evaluations', id, evaluation, { ...evaluation, statut: 'valide', submitted_at: now, validated_at: now });
     } catch (_) {}
 
     return { success: true };
@@ -1507,6 +1401,27 @@ export class SupabaseDataService {
     return { success: true, filePath: data.path };
   }
 
+  static async getPreuveFileUrl(
+    filePath: string
+  ): Promise<{ success: boolean; url?: string; error?: string }> {
+    if (!filePath) return { success: false, error: 'Aucun fichier associÃ© Ã  cette preuve.' };
+    if (/^https?:\/\//i.test(filePath)) return { success: true, url: filePath };
+
+    const normalizedPath = normalizePreuveStoragePath(filePath);
+    const { data, error } = await supabase!.storage
+      .from(PREUVES_BUCKET)
+      .createSignedUrl(normalizedPath, 60 * 10);
+
+    if (error || !data?.signedUrl) {
+      return {
+        success: false,
+        error: 'Impossible de gÃ©nÃ©rer le lien de consultation du document : ' + (error?.message || 'URL absente')
+      };
+    }
+
+    return { success: true, url: data.signedUrl };
+  }
+
   static async addAuditLog(
     userId: string,
     action: string,
@@ -1536,6 +1451,87 @@ export class SupabaseDataService {
     if (error) throw error;
     return data || [];
   }
+
+  static async getAllUsers(): Promise<User[]> {
+    const { data, error } = await supabase!
+      .from('users')
+      .select('*')
+      .order('nom');
+    if (error) throw error;
+    return data || [];
+  }
+
+  static async createUserAdmin(input: {
+    email: string;
+    password: string;
+    nom: string;
+    prenom: string;
+    role: UserRole;
+    drena_id?: string;
+    iepp_id?: string;
+    telephone?: string;
+  }): Promise<{ success: boolean; user?: User; error?: string }> {
+    const { data, error } = await supabase!.functions.invoke('admin-create-user', {
+      body: input
+    });
+
+    if (error) {
+      // Supabase functions client surfaces non-2xx responses as a generic error;
+      // try to recover the specific message the function returned in its JSON body.
+      let message = error.message || "Échec de la création du compte.";
+      try {
+        const ctx = (error as any).context;
+        if (ctx && typeof ctx.json === 'function') {
+          const parsed = await ctx.json();
+          if (parsed?.error) message = parsed.error;
+        }
+      } catch (_) {}
+      return { success: false, error: message };
+    }
+    if (data?.error) return { success: false, error: data.error };
+    return { success: true, user: data.user as User };
+  }
+
+  static async updateUserProfile(
+    id: string,
+    updates: Partial<Pick<User, 'nom' | 'prenom' | 'role' | 'telephone' | 'actif'>> & { drena_id?: string | null; iepp_id?: string | null }
+  ): Promise<{ success: boolean; error?: string }> {
+    const { error } = await supabase!
+      .from('users')
+      .update(updates)
+      .eq('id', id);
+    if (error) return { success: false, error: 'Erreur lors de la mise à jour du profil : ' + error.message };
+    return { success: true };
+  }
+
+  static async deleteUserProfile(id: string): Promise<{ success: boolean; error?: string }> {
+    const { error } = await supabase!
+      .from('users')
+      .delete()
+      .eq('id', id);
+    if (error) return { success: false, error: 'Suppression impossible (des données sont probablement rattachées à cet utilisateur, désactivez-le plutôt) : ' + error.message };
+    return { success: true };
+  }
+
+  static async resetUserPassword(id: string, newPassword: string): Promise<{ success: boolean; error?: string }> {
+    const { data, error } = await supabase!.functions.invoke('admin-reset-password', {
+      body: { userId: id, newPassword }
+    });
+
+    if (error) {
+      let message = error.message || 'Échec de la réinitialisation du mot de passe.';
+      try {
+        const ctx = (error as any).context;
+        if (ctx && typeof ctx.json === 'function') {
+          const parsed = await ctx.json();
+          if (parsed?.error) message = parsed.error;
+        }
+      } catch (_) {}
+      return { success: false, error: message };
+    }
+    if (data?.error) return { success: false, error: data.error };
+    return { success: true };
+  }
 }
 
 // UNIFIED EXPORT SERVICE (DATA ROUTER)
@@ -1564,6 +1560,20 @@ export class DataService {
     if (!isSupabaseConfigured) {
       LocalDemoService.initialize();
     }
+  }
+
+  static async registerEnqueteur(input: {
+    email: string;
+    password: string;
+    nom: string;
+    prenom: string;
+    drena_id: string;
+    iepp_id?: string;
+  }): Promise<{ success: boolean; user?: User; error?: string; requiresEmailConfirmation?: boolean }> {
+    if (isSupabaseConfigured) {
+      return await SupabaseDataService.registerEnqueteur(input);
+    }
+    return await LocalDemoService.registerEnqueteur(input);
   }
 
   static async getDrenas(): Promise<Drena[]> {
@@ -1601,6 +1611,36 @@ export class DataService {
     return await LocalDemoService.getCampagnes();
   }
 
+  static async createCampagne(input: {
+    nom: string;
+    annee_scolaire: string;
+    date_debut: string;
+    date_fin?: string;
+    statut: CampagneStatut;
+  }): Promise<{ success: boolean; campagne?: Campagne; error?: string }> {
+    if (isSupabaseConfigured) {
+      return await SupabaseDataService.createCampagne(input);
+    }
+    return await LocalDemoService.createCampagne(input);
+  }
+
+  static async updateCampagne(
+    id: string,
+    updates: Partial<Pick<Campagne, 'nom' | 'annee_scolaire' | 'date_debut' | 'date_fin' | 'statut'>>
+  ): Promise<{ success: boolean; error?: string }> {
+    if (isSupabaseConfigured) {
+      return await SupabaseDataService.updateCampagne(id, updates);
+    }
+    return await LocalDemoService.updateCampagne(id, updates);
+  }
+
+  static async deleteCampagne(id: string): Promise<{ success: boolean; error?: string }> {
+    if (isSupabaseConfigured) {
+      return await SupabaseDataService.deleteCampagne(id);
+    }
+    return await LocalDemoService.deleteCampagne(id);
+  }
+
   static async getEvaluations(user: User): Promise<(Evaluation & { etablissement_nom?: string; drena_nom?: string; iepp_nom?: string; score_global?: number; classification?: string; scores?: any })[]> {
     if (isSupabaseConfigured) {
       return await SupabaseDataService.getEvaluations(user);
@@ -1630,12 +1670,17 @@ export class DataService {
     equipes: EquipeEvaluation[],
     recommandations: Partial<Recommandation> | null,
     preuves: PreuveDocumentaire[],
-    userId: string
+    userId: string,
+    etablissementUpdates?: Partial<Etablissement>,
+    cogesUpdates?: Partial<Coges>
   ): Promise<{ success: boolean; error?: string }> {
-    if (isSupabaseConfigured) {
-      return await SupabaseDataService.saveDraft(evaluation, reponses, membresBe, equipes, recommandations, preuves, userId);
+    if (!evaluation.campagne_id) {
+      return { success: false, error: 'Impossible d\'enregistrer : aucune campagne active n\'est associée à l\'évaluation.' };
     }
-    return await LocalDemoService.saveDraft(evaluation, reponses, membresBe, equipes, recommandations, preuves, userId);
+    if (isSupabaseConfigured) {
+      return await SupabaseDataService.saveDraft(evaluation, reponses, membresBe, equipes, recommandations, preuves, userId, etablissementUpdates, cogesUpdates);
+    }
+    return await LocalDemoService.saveDraft(evaluation, reponses, membresBe, equipes, recommandations, preuves, userId, etablissementUpdates, cogesUpdates);
   }
 
   static async submitEvaluation(id: string, userId: string): Promise<{ success: boolean; errors?: string[] }> {
@@ -1668,6 +1713,15 @@ export class DataService {
     return await LocalDemoService.uploadPreuveFile(evaluationId, typePreuve, file);
   }
 
+  static async getPreuveFileUrl(
+    filePath: string
+  ): Promise<{ success: boolean; url?: string; error?: string }> {
+    if (isSupabaseConfigured) {
+      return await SupabaseDataService.getPreuveFileUrl(filePath);
+    }
+    return await LocalDemoService.getPreuveFileUrl(filePath);
+  }
+
   static async getAuditLogs(): Promise<AuditLog[]> {
     if (isSupabaseConfigured) {
       return await SupabaseDataService.getAuditLogs();
@@ -1688,5 +1742,52 @@ export class DataService {
     } else {
       LocalDemoService.addAuditLog(userId, action, tableCible, ligneId, donneesAvant, donneesApres);
     }
+  }
+
+  static async getAllUsers(): Promise<User[]> {
+    if (isSupabaseConfigured) {
+      return await SupabaseDataService.getAllUsers();
+    }
+    return await LocalDemoService.getAllUsers();
+  }
+
+  static async createUserAdmin(input: {
+    email: string;
+    password: string;
+    nom: string;
+    prenom: string;
+    role: UserRole;
+    drena_id?: string;
+    iepp_id?: string;
+    telephone?: string;
+  }): Promise<{ success: boolean; user?: User; error?: string }> {
+    if (isSupabaseConfigured) {
+      return await SupabaseDataService.createUserAdmin(input);
+    }
+    return await LocalDemoService.createUserAdmin(input);
+  }
+
+  static async updateUserProfile(
+    id: string,
+    updates: Partial<Pick<User, 'nom' | 'prenom' | 'role' | 'telephone' | 'actif'>> & { drena_id?: string | null; iepp_id?: string | null }
+  ): Promise<{ success: boolean; error?: string }> {
+    if (isSupabaseConfigured) {
+      return await SupabaseDataService.updateUserProfile(id, updates);
+    }
+    return await LocalDemoService.updateUserProfile(id, updates);
+  }
+
+  static async deleteUserProfile(id: string): Promise<{ success: boolean; error?: string }> {
+    if (isSupabaseConfigured) {
+      return await SupabaseDataService.deleteUserProfile(id);
+    }
+    return await LocalDemoService.deleteUserProfile(id);
+  }
+
+  static async resetUserPassword(id: string, newPassword: string): Promise<{ success: boolean; error?: string }> {
+    if (isSupabaseConfigured) {
+      return await SupabaseDataService.resetUserPassword(id, newPassword);
+    }
+    return await LocalDemoService.resetUserPassword(id, newPassword);
   }
 }
