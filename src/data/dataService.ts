@@ -899,7 +899,55 @@ export class SupabaseDataService {
       return { success: true, user: newUser, requiresEmailConfirmation: true };
     }
 
-    return { success: true, user: newUser };
+    const profileResult = await this.getAuthenticatedUserProfile(data.user.id);
+    if (!profileResult.user) {
+      return {
+        success: false,
+        error: profileResult.error || 'Compte cree, mais le profil utilisateur est introuvable.'
+      };
+    }
+
+    return { success: true, user: profileResult.user };
+  }
+
+  static async getAuthenticatedUserProfile(
+    authUserId: string,
+    repairMissing = true
+  ): Promise<{ user?: User; error?: string }> {
+    const loadProfile = async () => {
+      return await supabase!
+        .from('users')
+        .select('*')
+        .eq('id', authUserId)
+        .maybeSingle();
+    };
+
+    let { data: profile, error: profileError } = await loadProfile();
+    if (profileError) {
+      return { error: `Impossible de charger votre profil utilisateur : ${profileError.message}` };
+    }
+
+    if (!profile && repairMissing) {
+      const { error: repairError } = await supabase!.rpc('ensure_own_user_profile');
+      if (repairError) {
+        return {
+          error: `Compte introuvable : la reparation automatique du profil a echoue (${repairError.message}).`
+        };
+      }
+
+      const retry = await loadProfile();
+      profile = retry.data;
+      profileError = retry.error;
+      if (profileError) {
+        return { error: `Profil repare, mais lecture impossible : ${profileError.message}` };
+      }
+    }
+
+    if (!profile) {
+      return { error: 'Compte introuvable : Votre identifiant n\'a pas de profil configure dans la table "users".' };
+    }
+
+    return { user: profile as User };
   }
 
   static async getDrenas(): Promise<Drena[]> {

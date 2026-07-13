@@ -9,7 +9,7 @@ import EvaluationForm from './components/EvaluationForm';
 import Login from './components/Login';
 import CampagneManager from './components/CampagneManager';
 import UserManager from './components/UserManager';
-import { DataService } from './data/dataService';
+import { DataService, SupabaseDataService } from './data/dataService';
 import { User, AuditLog } from './types';
 import { supabase, isSupabaseConfigured } from './supabaseClient';
 import { 
@@ -56,14 +56,10 @@ export default function App() {
           // Restore Supabase Auth Session
           const { data: { session } } = await supabase!.auth.getSession();
           if (session?.user) {
-            const { data: profile, error } = await supabase!
-              .from('users')
-              .select('*')
-              .eq('id', session.user.id)
-              .maybeSingle();
+            const profileResult = await SupabaseDataService.getAuthenticatedUserProfile(session.user.id);
 
-            if (!error && profile) {
-              setCurrentUser(profile as User);
+            if (profileResult.user && profileResult.user.actif === true) {
+              setCurrentUser(profileResult.user);
             } else {
               // Sign out if profile not found or errored
               await supabase!.auth.signOut();
@@ -91,13 +87,9 @@ export default function App() {
     if (isSupabaseConfigured) {
       const { data: { subscription } } = supabase!.auth.onAuthStateChange(async (event, session) => {
         if (event === 'SIGNED_IN' && session?.user) {
-          const { data: profile } = await supabase!
-            .from('users')
-            .select('*')
-            .eq('id', session.user.id)
-            .maybeSingle();
-          if (profile) {
-            setCurrentUser(profile as User);
+          const profileResult = await SupabaseDataService.getAuthenticatedUserProfile(session.user.id);
+          if (profileResult.user && profileResult.user.actif === true) {
+            setCurrentUser(profileResult.user);
           }
         } else if (event === 'SIGNED_OUT') {
           setCurrentUser(null);

@@ -5,7 +5,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { supabase, isSupabaseConfigured } from '../supabaseClient';
-import { PRE_SEEDED_USERS, DataService } from '../data/dataService';
+import { PRE_SEEDED_USERS, DataService, SupabaseDataService } from '../data/dataService';
 import { User, Drena, Iepp } from '../types';
 import { Shield, Lock, Mail, Server, Database, HelpCircle, Eye, EyeOff, UserPlus, MapPin, ArrowLeft, User as UserIcon } from 'lucide-react';
 
@@ -128,26 +128,16 @@ export default function Login({ onLoginSuccess }: LoginProps) {
           return;
         }
 
-        // Fetch profile from public.users table
-        const { data: profile, error: profileError } = await supabase!
-          .from('users')
-          .select('*')
-          .eq('id', authUser.id)
-          .maybeSingle();
+        const profileResult = await SupabaseDataService.getAuthenticatedUserProfile(authUser.id);
 
-        if (profileError) {
-          setErrorMsg(`Impossible de charger votre profil utilisateur : ${profileError.message}`);
+        if (!profileResult.user) {
+          setErrorMsg(profileResult.error || 'Compte introuvable : profil utilisateur absent.');
           await supabase!.auth.signOut();
           setLoading(false);
           return;
         }
 
-        if (!profile) {
-          setErrorMsg('Compte introuvable : Votre identifiant n\'a pas de profil configuré dans la table "users".');
-          await supabase!.auth.signOut();
-          setLoading(false);
-          return;
-        }
+        const profile = profileResult.user;
 
         if (profile.actif !== true) {
           setErrorMsg("Votre compte n'est pas activé. Veuillez contacter l'administration de la DAPS-COGES.");
@@ -156,7 +146,7 @@ export default function Login({ onLoginSuccess }: LoginProps) {
           return;
         }
 
-        onLoginSuccess(profile as User);
+        onLoginSuccess(profile);
       } else {
         // DEMO MODE: Sign in using email match or pre-seeded accounts
         const matched = PRE_SEEDED_USERS.find(u => u.email.toLowerCase() === email.trim().toLowerCase());
