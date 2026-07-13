@@ -963,12 +963,12 @@ export default function EvaluationForm({ currentUser, evaluationId, onClose }: E
                   </div>
 
                   <div className="space-y-1">
-                    <label className="block text-xs font-semibold text-gray-700">Établissement scolaire / École *</label>
+                    <label className="block text-xs font-semibold text-gray-700">COGES *</label>
                     <input
                       type="text"
                       className="w-full p-2 border border-gray-200 rounded-lg text-xs outline-none focus:ring-1 focus:ring-indigo-500 disabled:bg-gray-50 disabled:text-gray-400"
                       disabled={!selectedIeppId}
-                      placeholder="Saisir le nom de l'établissement scolaire..."
+                      placeholder="Saisir le nom du COGES..."
                       value={etablissementUpdates.nom || ''}
                       onChange={(e) => handleEtablissementNameChange(e.target.value.toUpperCase())}
                     />

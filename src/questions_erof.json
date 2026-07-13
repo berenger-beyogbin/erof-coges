@@ -89,24 +89,12 @@
           "type": "select",
           "options": [
             {
-              "value": "prescolaire",
-              "label": "Préscolaire"
+              "value": "prescolaire_primaire",
+              "label": "PRESCOLAIRE-PRIMAIRE"
             },
             {
-              "value": "primaire",
-              "label": "Primaire"
-            },
-            {
-              "value": "groupe_scolaire",
-              "label": "Groupe scolaire"
-            },
-            {
-              "value": "college",
-              "label": "Collège"
-            },
-            {
-              "value": "lycee",
-              "label": "Lycée"
+              "value": "secondaire",
+              "label": "SECONDAIRE"
             }
           ],
           "required": true,

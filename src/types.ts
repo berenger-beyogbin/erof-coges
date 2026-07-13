@@ -45,7 +45,7 @@ export interface Etablissement {
   id: string;
   nom: string;
   code_desps: string;
-  type_etablissement: 'prescolaire' | 'primaire' | 'groupe_scolaire' | 'college' | 'lycee';
+  type_etablissement: 'prescolaire_primaire' | 'secondaire';
   iepp_id: string;
   localite: string;
   statut: 'public' | 'prive_laic' | 'prive_confessionnel';
