@@ -289,14 +289,6 @@ export class LocalDemoService {
     if (!input.nom.trim() || !input.prenom.trim()) return { success: false, error: 'Le nom et le prénom sont obligatoires.' };
     if (!input.drena_id) return { success: false, error: 'Veuillez sélectionner votre DRENA de rattachement.' };
 
-    if (input.iepp_id) {
-      const iepps = getStoredItem<Iepp[]>('iepps', []);
-      const iepp = iepps.find(i => i.id === input.iepp_id);
-      if (!iepp || iepp.drena_id !== input.drena_id) {
-        return { success: false, error: 'L\'IEPP sélectionnée ne correspond pas à la DRENA choisie.' };
-      }
-    }
-
     const users = getStoredItem<User[]>('users', []);
     if (users.some(u => u.email.toLowerCase() === email)) {
       return { success: false, error: 'Un compte existe déjà avec cette adresse e-mail.' };
@@ -309,7 +301,7 @@ export class LocalDemoService {
       prenom: input.prenom.trim(),
       role: 'enqueteur',
       drena_id: input.drena_id,
-      iepp_id: input.iepp_id || undefined,
+      iepp_id: undefined,
       actif: true
     };
     setStoredItem<User[]>('users', [...users, newUser]);
@@ -798,7 +790,7 @@ export class LocalDemoService {
       prenom: input.prenom.trim(),
       role: input.role,
       drena_id: input.drena_id || undefined,
-      iepp_id: input.iepp_id || undefined,
+      iepp_id: input.role === 'superviseur_iepp' ? (input.iepp_id || undefined) : undefined,
       telephone: input.telephone || undefined,
       actif: true
     };
@@ -815,11 +807,10 @@ export class LocalDemoService {
     if (index < 0) return { success: false, error: 'Utilisateur introuvable.' };
     // Explicit null means "clear the field" (e.g. role no longer needs a DRENA/IEPP rattachement);
     // it must not be conflated with undefined, which would otherwise leave the old value in place.
-    const normalized = {
-      ...updates,
-      drena_id: updates.drena_id === null ? undefined : updates.drena_id,
-      iepp_id: updates.iepp_id === null ? undefined : updates.iepp_id
-    };
+    const normalized: typeof updates = { ...updates };
+    if ('drena_id' in updates) normalized.drena_id = updates.drena_id === null ? undefined : updates.drena_id;
+    if ('iepp_id' in updates) normalized.iepp_id = updates.iepp_id === null ? undefined : updates.iepp_id;
+    if (updates.role && updates.role !== 'superviseur_iepp') normalized.iepp_id = undefined;
     users[index] = { ...users[index], ...normalized };
     setStoredItem<User[]>('users', users);
     return { success: true };
@@ -850,17 +841,6 @@ export class SupabaseDataService {
     drena_id: string;
     iepp_id?: string;
   }): Promise<{ success: boolean; user?: User; error?: string; requiresEmailConfirmation?: boolean }> {
-    if (input.iepp_id) {
-      const { data: iepp, error: ieppError } = await supabase!
-        .from('iepps')
-        .select('*')
-        .eq('id', input.iepp_id)
-        .maybeSingle();
-      if (ieppError || !iepp || iepp.drena_id !== input.drena_id) {
-        return { success: false, error: 'L\'IEPP sélectionnée ne correspond pas à la DRENA choisie.' };
-      }
-    }
-
     // The profile row in public.users is provisioned server-side by the
     // on_auth_user_created_enqueteur trigger (RLS only allows admin_national to
     // write to that table directly), fed by this signup metadata.
@@ -873,7 +853,7 @@ export class SupabaseDataService {
           nom: input.nom.trim(),
           prenom: input.prenom.trim(),
           drena_id: input.drena_id,
-          iepp_id: input.iepp_id || null
+          iepp_id: null
         }
       }
     });
@@ -889,7 +869,7 @@ export class SupabaseDataService {
       prenom: input.prenom.trim(),
       role: 'enqueteur',
       drena_id: input.drena_id,
-      iepp_id: input.iepp_id || undefined,
+      iepp_id: undefined,
       actif: true
     };
 
@@ -1519,8 +1499,12 @@ export class SupabaseDataService {
     iepp_id?: string;
     telephone?: string;
   }): Promise<{ success: boolean; user?: User; error?: string }> {
+    const body = {
+      ...input,
+      iepp_id: input.role === 'superviseur_iepp' ? input.iepp_id : undefined
+    };
     const { data, error } = await supabase!.functions.invoke('admin-create-user', {
-      body: input
+      body
     });
 
     if (error) {
@@ -1544,9 +1528,15 @@ export class SupabaseDataService {
     id: string,
     updates: Partial<Pick<User, 'nom' | 'prenom' | 'role' | 'telephone' | 'actif'>> & { drena_id?: string | null; iepp_id?: string | null }
   ): Promise<{ success: boolean; error?: string }> {
+    const sanitizedUpdates = updates.role
+      ? {
+          ...updates,
+          iepp_id: updates.role === 'superviseur_iepp' ? updates.iepp_id : null
+        }
+      : updates;
     const { error } = await supabase!
       .from('users')
-      .update(updates)
+      .update(sanitizedUpdates)
       .eq('id', id);
     if (error) return { success: false, error: 'Erreur lors de la mise à jour du profil : ' + error.message };
     return { success: true };

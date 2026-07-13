@@ -202,7 +202,7 @@ export default function UserManager({ currentUser }: UserManagerProps) {
         prenom: createForm.prenom.trim(),
         role: createForm.role,
         drena_id: roleRequiresDrena(createForm.role) ? createForm.drena_id : undefined,
-        iepp_id: (createForm.role === 'superviseur_iepp' || createForm.role === 'enqueteur') ? (createForm.iepp_id || undefined) : undefined,
+        iepp_id: createForm.role === 'superviseur_iepp' ? (createForm.iepp_id || undefined) : undefined,
         telephone: createForm.telephone.trim() || undefined
       });
       if (!result.success) {
@@ -271,7 +271,7 @@ export default function UserManager({ currentUser }: UserManagerProps) {
         telephone: editForm.telephone.trim() || undefined,
         role: editForm.role,
         drena_id: roleRequiresDrena(editForm.role) ? editForm.drena_id : null,
-        iepp_id: (editForm.role === 'superviseur_iepp' || editForm.role === 'enqueteur') ? (editForm.iepp_id || null) : null,
+        iepp_id: editForm.role === 'superviseur_iepp' ? (editForm.iepp_id || null) : null,
         actif: editForm.actif
       });
       if (!result.success) {
@@ -557,19 +557,9 @@ export default function UserManager({ currentUser }: UserManagerProps) {
               </div>
             )}
             {createForm.role === 'enqueteur' && (
-              <div>
-                <label className="block text-[11px] font-bold text-slate-600 mb-1">IEPP de rattachement (optionnel)</label>
-                <select
-                  value={createForm.iepp_id}
-                  onChange={(e) => setCreateForm({ ...createForm, iepp_id: e.target.value })}
-                  disabled={!createForm.drena_id}
-                  className="w-full text-xs border border-slate-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none bg-white disabled:opacity-50"
-                >
-                  <option value="">Aucune (rattaché à la DRENA entière)</option>
-                  {ieppsForDrena(createForm.drena_id).map(i => (
-                    <option key={i.id} value={i.id}>{i.nom}</option>
-                  ))}
-                </select>
+              <div className="sm:col-span-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">
+                <p className="text-[11px] font-bold uppercase tracking-wider text-amber-700">Accès enquêteur niveau DRENA</p>
+                <p className="text-[11px] text-slate-600 mt-0.5">Aucune IEPP n'est à choisir pour ce rôle.</p>
               </div>
             )}
           </div>
@@ -682,10 +672,10 @@ export default function UserManager({ currentUser }: UserManagerProps) {
                   </select>
                 </div>
               )}
-              {(editForm.role === 'superviseur_iepp' || editForm.role === 'enqueteur') && (
+              {editForm.role === 'superviseur_iepp' && (
                 <div>
                   <label className="block text-[11px] font-bold text-slate-600 mb-1">
-                    IEPP de rattachement{editForm.role === 'enqueteur' ? ' (optionnel)' : ''}
+                    IEPP de rattachement
                   </label>
                   <select
                     value={editForm.iepp_id}
@@ -693,11 +683,17 @@ export default function UserManager({ currentUser }: UserManagerProps) {
                     disabled={!editForm.drena_id}
                     className="w-full text-xs border border-slate-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none bg-white disabled:opacity-50"
                   >
-                    <option value="">{editForm.role === 'enqueteur' ? 'Aucune' : 'Sélectionnez...'}</option>
+                    <option value="">Sélectionnez...</option>
                     {ieppsForDrena(editForm.drena_id).map(i => (
                       <option key={i.id} value={i.id}>{i.nom}</option>
                     ))}
                   </select>
+                </div>
+              )}
+              {editForm.role === 'enqueteur' && (
+                <div className="sm:col-span-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">
+                  <p className="text-[11px] font-bold uppercase tracking-wider text-amber-700">Accès enquêteur niveau DRENA</p>
+                  <p className="text-[11px] text-slate-600 mt-0.5">L'IEPP est automatiquement retirée pour ce rôle.</p>
                 </div>
               )}
             </div>

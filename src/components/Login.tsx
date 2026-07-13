@@ -6,7 +6,7 @@
 import React, { useState, useEffect } from 'react';
 import { supabase, isSupabaseConfigured } from '../supabaseClient';
 import { PRE_SEEDED_USERS, DataService, SupabaseDataService } from '../data/dataService';
-import { User, Drena, Iepp } from '../types';
+import { User, Drena } from '../types';
 import { Shield, Lock, Mail, Server, Database, HelpCircle, Eye, EyeOff, UserPlus, MapPin, ArrowLeft, User as UserIcon } from 'lucide-react';
 
 interface LoginProps {
@@ -27,15 +27,11 @@ export default function Login({ onLoginSuccess }: LoginProps) {
 
   // Registration (self-service enqueteur account creation)
   const [drenas, setDrenas] = useState<Drena[]>([]);
-  const [iepps, setIepps] = useState<Iepp[]>([]);
-  const [loadingIepps, setLoadingIepps] = useState(false);
   const [regNom, setRegNom] = useState('');
   const [regPrenom, setRegPrenom] = useState('');
   const [regEmail, setRegEmail] = useState('');
   const [regPassword, setRegPassword] = useState('');
-  const [regNiveau, setRegNiveau] = useState<'drena' | 'iepp'>('drena');
   const [regDrenaId, setRegDrenaId] = useState('');
-  const [regIeppId, setRegIeppId] = useState('');
   const [regLoading, setRegLoading] = useState(false);
   const [regErrorMsg, setRegErrorMsg] = useState<string | null>(null);
   const [regSuccessMsg, setRegSuccessMsg] = useState<string | null>(null);
@@ -48,27 +44,9 @@ export default function Login({ onLoginSuccess }: LoginProps) {
     }
   }, [mode]);
 
-  // Load IEPP list scoped to the chosen DRENA whenever it changes (or the level switches to "iepp")
-  useEffect(() => {
-    setRegIeppId('');
-    if (regNiveau !== 'iepp' || !regDrenaId) {
-      setIepps([]);
-      return;
-    }
-    setLoadingIepps(true);
-    DataService.getIepps(regDrenaId)
-      .then(setIepps)
-      .catch(() => setRegErrorMsg('Impossible de charger la liste des IEPP. Veuillez réessayer.'))
-      .finally(() => setLoadingIepps(false));
-  }, [regNiveau, regDrenaId]);
-
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     setRegErrorMsg(null);
-    if (regNiveau === 'iepp' && !regIeppId) {
-      setRegErrorMsg('Veuillez sélectionner votre IEPP de rattachement.');
-      return;
-    }
     setRegLoading(true);
     try {
       const result = await DataService.registerEnqueteur({
@@ -77,7 +55,7 @@ export default function Login({ onLoginSuccess }: LoginProps) {
         nom: regNom,
         prenom: regPrenom,
         drena_id: regDrenaId,
-        iepp_id: regNiveau === 'iepp' ? regIeppId : undefined
+        iepp_id: undefined
       });
 
       if (!result.success || !result.user) {
@@ -362,7 +340,7 @@ export default function Login({ onLoginSuccess }: LoginProps) {
           ) : (
             <form onSubmit={handleRegister} className="p-6 space-y-5">
               <p className="text-[11px] text-slate-400 leading-relaxed">
-                Les enquêteurs sont recrutés directement sur le terrain. Indiquez votre niveau de rattachement : un enquêteur DRENA voit les saisies de toutes les IEPP de sa région, un enquêteur IEPP ne voit que celles de son IEPP.
+                Les enquêteurs sont recrutés directement sur le terrain. Sélectionnez votre DRENA de rattachement : chaque compte enquêteur aura automatiquement un accès niveau DRENA.
               </p>
 
               {regErrorMsg && (
@@ -460,11 +438,7 @@ export default function Login({ onLoginSuccess }: LoginProps) {
                   <select
                     required
                     value={regDrenaId}
-                    onChange={(e) => {
-                      const newDrenaId = e.target.value;
-                      setRegDrenaId(newDrenaId);
-                      if (!newDrenaId) setRegNiveau('drena');
-                    }}
+                    onChange={(e) => setRegDrenaId(e.target.value)}
                     className="block w-full pl-10 pr-3.5 py-2.5 bg-slate-900 border border-slate-700 rounded-xl text-xs text-white outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 transition-all font-semibold appearance-none"
                   >
                     <option value="" disabled>Sélectionnez votre DRENA...</option>
@@ -479,66 +453,12 @@ export default function Login({ onLoginSuccess }: LoginProps) {
                 <label className="block text-[11px] uppercase tracking-wider font-extrabold text-slate-400">
                   Niveau de rattachement
                 </label>
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setRegNiveau('drena')}
-                    className={`py-2 px-3 rounded-xl text-xs font-bold uppercase tracking-wider border transition-all ${
-                      regNiveau === 'drena'
-                        ? 'bg-amber-500 text-slate-950 border-amber-500'
-                        : 'bg-slate-900 text-slate-400 border-slate-700 hover:text-slate-200'
-                    }`}
-                  >
-                    DRENA
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => { if (regDrenaId) setRegNiveau('iepp'); }}
-                    disabled={!regDrenaId}
-                    title={!regDrenaId ? 'Sélectionnez d\'abord une DRENA' : undefined}
-                    className={`py-2 px-3 rounded-xl text-xs font-bold uppercase tracking-wider border transition-all disabled:opacity-40 disabled:cursor-not-allowed ${
-                      regNiveau === 'iepp'
-                        ? 'bg-amber-500 text-slate-950 border-amber-500'
-                        : 'bg-slate-900 text-slate-400 border-slate-700 hover:enabled:text-slate-200'
-                    }`}
-                  >
-                    IEPP
-                  </button>
+                <div className="flex items-center justify-between rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3">
+                  <span className="text-xs font-extrabold uppercase tracking-wider text-amber-300">Accès niveau DRENA</span>
+                  <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Automatique</span>
                 </div>
-                {!regDrenaId && (
-                  <p className="text-[10px] text-slate-500">Sélectionnez d'abord une DRENA pour pouvoir choisir une IEPP.</p>
-                )}
+                <p className="text-[10px] text-slate-500">L'enquêteur verra les données rattachées à toutes les IEPP de sa DRENA.</p>
               </div>
-
-              {regNiveau === 'iepp' && (
-                <div className="space-y-1.5">
-                  <label className="block text-[11px] uppercase tracking-wider font-extrabold text-slate-400">
-                    IEPP de rattachement
-                  </label>
-                  <div className="relative">
-                    <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-500">
-                      <MapPin className="h-4 w-4" />
-                    </div>
-                    <select
-                      required
-                      value={regIeppId}
-                      onChange={(e) => setRegIeppId(e.target.value)}
-                      disabled={!regDrenaId || loadingIepps}
-                      className="block w-full pl-10 pr-3.5 py-2.5 bg-slate-900 border border-slate-700 rounded-xl text-xs text-white outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 transition-all font-semibold appearance-none disabled:opacity-50"
-                    >
-                      <option value="" disabled>
-                        {!regDrenaId ? 'Sélectionnez d\'abord une DRENA...' : loadingIepps ? 'Chargement...' : 'Sélectionnez votre IEPP...'}
-                      </option>
-                      {iepps.map(i => (
-                        <option key={i.id} value={i.id}>{i.nom}</option>
-                      ))}
-                    </select>
-                  </div>
-                  {regDrenaId && !loadingIepps && iepps.length === 0 && (
-                    <p className="text-[10px] text-amber-500">Aucune IEPP enregistrée pour cette DRENA pour le moment.</p>
-                  )}
-                </div>
-              )}
 
               <button
                 type="submit"

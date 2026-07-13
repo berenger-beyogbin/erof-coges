@@ -84,7 +84,7 @@ Deno.serve(async (req) => {
     role,
     telephone,
     drena_id: roleRequiresDrena(role) ? drenaId : null,
-    iepp_id: role === "superviseur_iepp" || role === "enqueteur" ? ieppId : null,
+    iepp_id: role === "superviseur_iepp" ? ieppId : null,
     actif: true,
   };
 
