@@ -109,6 +109,9 @@ export default function EvaluationForm({ currentUser, evaluationId, onClose }: E
   const isDraftLikeStatus = evaluation.statut === 'brouillon' || evaluation.statut === 'en_revision';
   const saveButtonLabel = isDraftLikeStatus ? 'Enregistrer brouillon' : 'Enregistrement verrouille';
   const isFormBusy = saving || navigationSaving || isClosingDraft || isSubmitting || uploadingProofIdx !== null;
+  const requiredCogesName = String((etablissementUpdates as any).nom || (evaluation as any).etablissement?.nom || '').trim();
+  const hasRequiredCogesName = requiredCogesName.length > 0 && !/^COGES BROUILLON\b/i.test(requiredCogesName);
+  const missingCogesNameError = 'Renseignez le champ COGES avant d\'enregistrer le brouillon.';
 
   // question_code -> section number, needed for evaluation_reponses.section_num (NOT NULL)
   const questionSectionMap = React.useMemo(() => {
@@ -329,13 +332,13 @@ export default function EvaluationForm({ currentUser, evaluationId, onClose }: E
   // Autosaver trigger (every 30 seconds)
   useEffect(() => {
     const interval = setInterval(() => {
-      if (!isFormBusy && isDraftLikeStatus) {
+      if (!isFormBusy && isDraftLikeStatus && hasRequiredCogesName) {
         saveDraft(true);
       }
     }, 30000);
 
     return () => clearInterval(interval);
-  }, [evaluation, reponses, etablissementUpdates, cogesUpdates, membresBe, equipes, recommandations, preuves, isFormBusy, isDraftLikeStatus]);
+  }, [evaluation, reponses, etablissementUpdates, cogesUpdates, membresBe, equipes, recommandations, preuves, isFormBusy, isDraftLikeStatus, hasRequiredCogesName]);
 
   // Primary draft saver
   const performSaveDraft = async (
@@ -349,8 +352,6 @@ export default function EvaluationForm({ currentUser, evaluationId, onClose }: E
       else alert(error);
       return { success: false, error };
     }
-    if (isAuto) setAutoSaveStatus('saving');
-    else setSaving(true);
 
     const latestEvaluation = evaluationRef.current;
     const latestEtablissementUpdates = etablissementUpdatesRef.current;
@@ -360,6 +361,14 @@ export default function EvaluationForm({ currentUser, evaluationId, onClose }: E
     const latestMembresBe = membresBeRef.current;
     const latestEquipes = equipesRef.current;
     const latestRecommandations = recommandationsRef.current;
+    const latestCogesName = String((latestEtablissementUpdates as any).nom || (latestEvaluation as any).etablissement?.nom || '').trim();
+    if (!latestCogesName || /^COGES BROUILLON\b/i.test(latestCogesName)) {
+      if (!isAuto) alert(missingCogesNameError);
+      return { success: false, error: missingCogesNameError };
+    }
+
+    if (isAuto) setAutoSaveStatus('saving');
+    else setSaving(true);
     const etablissementId = latestEvaluation.etablissement_id || draftEtablissementIdRef.current || generateUUID();
     const cogesId = latestEvaluation.coges_id || draftCogesIdRef.current || generateUUID();
     draftEtablissementIdRef.current = etablissementId;
@@ -981,6 +990,15 @@ export default function EvaluationForm({ currentUser, evaluationId, onClose }: E
             <ShieldAlert className="h-5 w-5 shrink-0 text-red-600 mt-0.5" />
             <p className="text-xs font-bold text-red-800 leading-relaxed">
               Aucune campagne active n'est configurée. Veuillez contacter l'administrateur.
+            </p>
+          </div>
+        )}
+
+        {isDraftLikeStatus && !hasRequiredCogesName && (
+          <div className="bg-amber-50 p-4 rounded-xl border border-amber-200 flex items-start space-x-2">
+            <ShieldAlert className="h-5 w-5 shrink-0 text-amber-600 mt-0.5" />
+            <p className="text-xs font-bold text-amber-900 leading-relaxed">
+              Le champ COGES est obligatoire avant l'enregistrement du brouillon.
             </p>
           </div>
         )}

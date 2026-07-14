@@ -1217,6 +1217,10 @@ export class SupabaseDataService {
     }
 
     const fallbackSuffix = evaluationId.slice(0, 8).toUpperCase();
+    const etablissementNom = cleanText(etablissementDraft.nom) || cleanText(existingEtablissement?.nom);
+    if (!etablissementNom || /^COGES BROUILLON\b/i.test(etablissementNom)) {
+      return { success: false, error: "Impossible d'enregistrer le brouillon : renseignez d'abord le nom du COGES." };
+    }
     const etablissementType = (
       cleanText(etablissementDraft.type_etablissement) ||
       cleanText(existingEtablissement?.type_etablissement) ||
@@ -1227,7 +1231,7 @@ export class SupabaseDataService {
       ...etablissementDraft,
       id: etablissementId,
       iepp_id: ieppId,
-      nom: cleanText(etablissementDraft.nom) || cleanText(existingEtablissement?.nom) || `COGES BROUILLON ${fallbackSuffix}`,
+      nom: etablissementNom,
       code_desps: cleanText(etablissementDraft.code_desps) || cleanText(existingEtablissement?.code_desps) || `DRAFT-${fallbackSuffix}`,
       type_etablissement: etablissementType
     });
