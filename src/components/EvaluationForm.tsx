@@ -83,9 +83,12 @@ export default function EvaluationForm({ currentUser, evaluationId, onClose }: E
   const [submissionErrors, setSubmissionErrors] = useState<string[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isClosingDraft, setIsClosingDraft] = useState(false);
+  const [uploadingProofIdx, setUploadingProofIdx] = useState<number | null>(null);
   const [fileOpenError, setFileOpenError] = useState<string | null>(null);
   const [gpsLoading, setGpsLoading] = useState(false);
   const [gpsError, setGpsError] = useState<string | null>(null);
+  const draftEtablissementIdRef = useRef<string | null>(null);
+  const draftCogesIdRef = useRef<string | null>(null);
   
   // Form rendering helpers
   const sections = questionsErof.sections;
@@ -252,6 +255,8 @@ export default function EvaluationForm({ currentUser, evaluationId, onClose }: E
     if (!loading) {
       loadIepps();
       setSelectedIeppId('');
+      draftEtablissementIdRef.current = null;
+      draftCogesIdRef.current = null;
       setEvaluation(prev => ({ ...prev, etablissement_id: undefined, coges_id: undefined }));
       setEtablissementUpdates({});
       setCogesUpdates({});
@@ -260,6 +265,8 @@ export default function EvaluationForm({ currentUser, evaluationId, onClose }: E
 
   useEffect(() => {
     if (!loading) {
+      draftEtablissementIdRef.current = null;
+      draftCogesIdRef.current = null;
       setEvaluation(prev => ({ ...prev, etablissement_id: undefined, coges_id: undefined }));
       setEtablissementUpdates({});
       setCogesUpdates({});
@@ -278,7 +285,10 @@ export default function EvaluationForm({ currentUser, evaluationId, onClose }: E
   }, [evaluation, reponses, etablissementUpdates, cogesUpdates, membresBe, equipes, recommandations, preuves, isClosingDraft, isSubmitting, isDraftLikeStatus]);
 
   // Primary draft saver
-  const saveDraft = async (isAuto = false): Promise<{ success: boolean; error?: string }> => {
+  const saveDraft = async (
+    isAuto = false,
+    overrides?: { preuves?: PreuveDocumentaire[] }
+  ): Promise<{ success: boolean; error?: string }> => {
     if (!evalId) return { success: false, error: 'Formulaire non initialise.' };
     if (noActiveCampagne) {
       const error = 'Aucune campagne active n\'est configuree. Veuillez contacter l\'administrateur.';
@@ -289,8 +299,10 @@ export default function EvaluationForm({ currentUser, evaluationId, onClose }: E
     if (isAuto) setAutoSaveStatus('saving');
     else setSaving(true);
 
-    const etablissementId = evaluation.etablissement_id || generateUUID();
-    const cogesId = evaluation.coges_id || generateUUID();
+    const etablissementId = evaluation.etablissement_id || draftEtablissementIdRef.current || generateUUID();
+    const cogesId = evaluation.coges_id || draftCogesIdRef.current || generateUUID();
+    draftEtablissementIdRef.current = etablissementId;
+    draftCogesIdRef.current = cogesId;
     const evaluationToSave = {
       ...evaluation,
       id: evalId,
@@ -309,6 +321,7 @@ export default function EvaluationForm({ currentUser, evaluationId, onClose }: E
       ...etablissementUpdates,
       iepp_id: etablissementUpdates.iepp_id || selectedIeppId || undefined
     };
+    const preuvesToSave = overrides?.preuves || preuves;
 
     // Prepare responses EAV structures from record map with stable IDs
     const mappedReponses: EvaluationReponse[] = Object.entries(reponses).map(([code, val]) => {
@@ -333,7 +346,7 @@ export default function EvaluationForm({ currentUser, evaluationId, onClose }: E
         membresBe,
         equipes,
         recommandations,
-        preuves,
+        preuvesToSave,
         currentUser.id,
         etablissementToSave,
         cogesUpdates
@@ -544,35 +557,53 @@ export default function EvaluationForm({ currentUser, evaluationId, onClose }: E
 
   // Handle Drag/Drop File Upload for section 17
   const handleFileUpload = async (idx: number, file: File) => {
+    if (uploadingProofIdx !== null) return;
+
     if (file.size > 10 * 1024 * 1024) {
       alert('Taille maximale autorisée : 10 Mo');
       return;
     }
     const extension = file.name.split('.').pop()?.toLowerCase();
-    if (!['jpg', 'png', 'pdf'].includes(extension || '')) {
-      alert('Formats acceptés : PDF, PNG, JPG uniquement.');
+    if (!['jpg', 'jpeg', 'png', 'pdf'].includes(extension || '')) {
+      alert('Formats acceptés : PDF, PNG, JPG/JPEG uniquement.');
       return;
     }
 
+    setUploadingProofIdx(idx);
     try {
+      const draftResult = await saveDraft(true);
+      if (!draftResult.success) {
+        alert(`Impossible d'envoyer le fichier : le brouillon doit d'abord être enregistré. ${draftResult.error || ''}`);
+        return;
+      }
+
       const result = await DataService.uploadPreuveFile(evalId, preuves[idx].type_preuve, file);
       if (result.success && result.filePath) {
-        setPreuves(prev => {
-          const next = [...prev];
-          next[idx] = {
-            ...next[idx],
-            fichier_path: result.filePath,
-            fichier_nom_original: file.name,
-            statut: 'disponible_consultee' // Set status automatically upon upload success
-          };
-          return next;
-        });
+        const nextPreuves = preuves.map((proof, proofIdx) => (
+          proofIdx === idx
+            ? {
+                ...proof,
+                fichier_path: result.filePath,
+                fichier_nom_original: file.name,
+                statut: 'disponible_consultee' as const
+              }
+            : proof
+        ));
+        setPreuves(nextPreuves);
+
+        const persistResult = await saveDraft(true, { preuves: nextPreuves });
+        if (!persistResult.success) {
+          alert(`Fichier envoyé, mais le lien n'a pas pu être enregistré dans le brouillon : ${persistResult.error || 'erreur inconnue'}`);
+          return;
+        }
         alert(`Fichier "${file.name}" téléchargé avec succès.`);
       } else {
         alert(`Échec d'upload : ${result.error}`);
       }
     } catch (e: any) {
       alert(`Erreur d'upload : ${e.message}`);
+    } finally {
+      setUploadingProofIdx(null);
     }
   };
 
@@ -910,11 +941,12 @@ export default function EvaluationForm({ currentUser, evaluationId, onClose }: E
                           }}
                         />
                         <button
-                          onClick={() => fileInputRef.current?.click()}
-                          className="p-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold rounded-lg border border-indigo-200 flex items-center space-x-1"
+                          onClick={() => uploadingProofIdx === null && fileInputRef.current?.click()}
+                          disabled={uploadingProofIdx !== null}
+                          className="p-1.5 bg-indigo-50 hover:bg-indigo-100 disabled:opacity-60 disabled:cursor-wait text-indigo-700 font-bold rounded-lg border border-indigo-200 flex items-center space-x-1"
                         >
                           <Upload className="h-3.5 w-3.5" />
-                          <span className="text-[10px]">Upload</span>
+                          <span className="text-[10px]">{uploadingProofIdx === idx ? 'Envoi...' : 'Upload'}</span>
                         </button>
                         {proof.fichier_path && (
                           <button
