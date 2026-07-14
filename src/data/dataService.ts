@@ -27,6 +27,24 @@ import { validateEvaluationForSubmission } from '../validation';
 
 const PREUVES_BUCKET = 'preuves-erof';
 
+function cleanUuid(value: unknown): string | undefined {
+  return typeof value === 'string' && value.trim() ? value.trim() : undefined;
+}
+
+function cleanText(value: unknown): string | undefined {
+  return typeof value === 'string' && value.trim() ? value.trim() : undefined;
+}
+
+function nullIfBlank<T>(value: T): T | null {
+  return value === '' ? null : value;
+}
+
+function cleanDraftPayload<T extends Record<string, any>>(payload: T): T {
+  return Object.fromEntries(
+    Object.entries(payload).map(([key, value]) => [key, nullIfBlank(value)])
+  ) as T;
+}
+
 // Builds the upsert payload for a storage_table-scoped side entity (etablissements / coges)
 // linked to an evaluation. Guards against sending an update with a blank/missing parent id
 // (never send "" as a UUID) instead of silently dropping the data.
@@ -36,11 +54,12 @@ function buildLinkedUpdatePayload<T extends { id?: string }>(
   entityLabel: string
 ): { payload: (Partial<T> & { id: string }) | null; error?: string } {
   if (!updates || Object.keys(updates).length === 0) return { payload: null };
-  if (!parentId) {
+  const cleanParentId = cleanUuid(parentId);
+  if (!cleanParentId) {
     return { payload: null, error: `Impossible d'enregistrer les informations "${entityLabel}" : aucun identifiant n'est associé à cette évaluation.` };
   }
   const { id: _ignored, ...rest } = updates as any;
-  return { payload: { ...(rest as Partial<T>), id: parentId } };
+  return { payload: { ...(rest as Partial<T>), id: cleanParentId } };
 }
 
 function normalizePreuveStoragePath(filePath: string): string {
@@ -1175,27 +1194,55 @@ export class SupabaseDataService {
       }
     }
 
-    const etabResult = buildLinkedUpdatePayload<Etablissement>(evaluation.etablissement_id, etablissementUpdates, "de l'établissement");
-    if (etabResult.error) return { success: false, error: etabResult.error };
-    const cogesResult = buildLinkedUpdatePayload<Coges>(evaluation.coges_id, cogesUpdates, 'du COGES');
-    if (cogesResult.error) return { success: false, error: cogesResult.error };
-    if (cogesResult.payload && evaluation.etablissement_id) {
-      cogesResult.payload.etablissement_id = evaluation.etablissement_id;
-    }
-    const cogesPayload = cogesResult.payload || (
-      evaluation.coges_id && evaluation.etablissement_id
-        ? { id: evaluation.coges_id, etablissement_id: evaluation.etablissement_id }
-        : null
-    );
+    const evaluationId = cleanUuid(evaluation.id);
+    const etablissementId = cleanUuid(evaluation.etablissement_id);
+    const cogesId = cleanUuid(evaluation.coges_id);
+    const campagneId = cleanUuid(evaluation.campagne_id);
+    const enqueteurId = cleanUuid(evaluation.enqueteur_id);
+    const createdBy = cleanUuid(evaluation.created_by) || userId;
 
-    if (etabResult.payload) {
-      const { error: etabErr } = await supabase!.from('etablissements').upsert(etabResult.payload);
-      if (etabErr) return { success: false, error: "Erreur de sauvegarde de l'établissement: " + etabErr.message };
+    if (!evaluationId) return { success: false, error: "Impossible d'enregistrer : identifiant d'évaluation absent." };
+    if (!campagneId) return { success: false, error: "Impossible d'enregistrer : aucune campagne active n'est associée à l'évaluation." };
+    if (!enqueteurId) return { success: false, error: "Impossible d'enregistrer : aucun enquêteur n'est associé à l'évaluation." };
+    if (!etablissementId || !cogesId) return { success: false, error: "Impossible d'enregistrer : identifiants COGES incomplets." };
+
+    const etablissementDraft = cleanDraftPayload({ ...(etablissementUpdates || {}) } as Record<string, any>) as Partial<Etablissement>;
+    const cogesDraft = cleanDraftPayload({ ...(cogesUpdates || {}) } as Record<string, any>) as Partial<Coges>;
+    const existingEtablissement = existingDetails?.evaluation.etablissement;
+    const existingCoges = existingDetails?.evaluation.coges;
+    const ieppId = cleanUuid(etablissementDraft.iepp_id) || cleanUuid(existingEtablissement?.iepp_id);
+
+    if (!ieppId) {
+      return { success: false, error: "Impossible d'enregistrer le brouillon : sélectionnez d'abord l'IEPP de rattachement." };
     }
-    if (cogesPayload) {
-      const { error: cogesErr } = await supabase!.from('coges').upsert(cogesPayload);
-      if (cogesErr) return { success: false, error: 'Erreur de sauvegarde du COGES: ' + cogesErr.message };
-    }
+
+    const fallbackSuffix = evaluationId.slice(0, 8).toUpperCase();
+    const etablissementType = (
+      cleanText(etablissementDraft.type_etablissement) ||
+      cleanText(existingEtablissement?.type_etablissement) ||
+      'prescolaire_primaire'
+    ) as Etablissement['type_etablissement'];
+    const etablissementPayload = cleanDraftPayload({
+      ...(existingEtablissement || {}),
+      ...etablissementDraft,
+      id: etablissementId,
+      iepp_id: ieppId,
+      nom: cleanText(etablissementDraft.nom) || cleanText(existingEtablissement?.nom) || `COGES BROUILLON ${fallbackSuffix}`,
+      code_desps: cleanText(etablissementDraft.code_desps) || cleanText(existingEtablissement?.code_desps) || `DRAFT-${fallbackSuffix}`,
+      type_etablissement: etablissementType
+    });
+    const cogesPayload = cleanDraftPayload({
+      ...(existingCoges || {}),
+      ...cogesDraft,
+      id: cogesId,
+      etablissement_id: etablissementId
+    });
+
+    const { error: etabErr } = await supabase!.from('etablissements').upsert(etablissementPayload);
+    if (etabErr) return { success: false, error: "Erreur de sauvegarde de l'établissement: " + etabErr.message };
+
+    const { error: cogesErr } = await supabase!.from('coges').upsert(cogesPayload);
+    if (cogesErr) return { success: false, error: 'Erreur de sauvegarde du COGES: ' + cogesErr.message };
 
     // Save core evaluation. Deliberately INSERT for a brand-new evaluation
     // rather than upsert(): upsert compiles to INSERT ... ON CONFLICT DO
@@ -1205,12 +1252,12 @@ export class SupabaseDataService {
     // for a row that doesn't exist yet — every first save would be rejected
     // by RLS. Once the row exists, a plain update() is unambiguous anyway.
     const evaluationRow = {
-      id: evaluation.id,
-      etablissement_id: evaluation.etablissement_id,
-      coges_id: evaluation.coges_id,
-      campagne_id: evaluation.campagne_id,
-      enqueteur_id: evaluation.enqueteur_id,
-      date_collecte: evaluation.date_collecte,
+      id: evaluationId,
+      etablissement_id: etablissementId,
+      coges_id: cogesId,
+      campagne_id: campagneId,
+      enqueteur_id: enqueteurId,
+      date_collecte: evaluation.date_collecte || new Date().toISOString().split('T')[0],
       statut: evaluation.statut || 'brouillon',
       president_nom: evaluation.president_nom,
       president_contact: evaluation.president_contact,
@@ -1222,12 +1269,12 @@ export class SupabaseDataService {
       effectif_total: evaluation.effectif_total || 0,
       effectif_filles: evaluation.effectif_filles || 0,
       effectif_garcons: evaluation.effectif_garcons || 0,
-      created_by: evaluation.created_by || userId,
+      created_by: createdBy,
       created_at: evaluation.created_at || now,
       updated_at: now
     };
     const { error: evErr } = existingDetails
-      ? await supabase!.from('evaluations').update(evaluationRow).eq('id', evaluation.id)
+      ? await supabase!.from('evaluations').update(evaluationRow).eq('id', evaluationId)
       : await supabase!.from('evaluations').insert(evaluationRow);
     if (evErr) return { success: false, error: 'Erreur de sauvegarde d\'évaluation: ' + evErr.message };
 
@@ -1247,7 +1294,7 @@ export class SupabaseDataService {
     if (recommandations) {
       const { error: recErr } = await supabase!.from('recommandations').upsert({
         id: recommandations.id,
-        evaluation_id: evaluation.id,
+        evaluation_id: evaluationId,
         forces: recommandations.forces || '',
         faiblesses: recommandations.faiblesses || '',
         difficultes: recommandations.difficultes || '',
@@ -1263,7 +1310,7 @@ export class SupabaseDataService {
     }
 
     try {
-      await this.addAuditLog(userId, 'Sauvegarde de brouillon', 'evaluations', evaluation.id);
+      await this.addAuditLog(userId, 'Sauvegarde de brouillon', 'evaluations', evaluationId);
     } catch (_) {}
 
     return { success: true };

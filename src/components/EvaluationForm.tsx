@@ -84,6 +84,8 @@ export default function EvaluationForm({ currentUser, evaluationId, onClose }: E
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isClosingDraft, setIsClosingDraft] = useState(false);
   const [fileOpenError, setFileOpenError] = useState<string | null>(null);
+  const [gpsLoading, setGpsLoading] = useState(false);
+  const [gpsError, setGpsError] = useState<string | null>(null);
   
   // Form rendering helpers
   const sections = questionsErof.sections;
@@ -250,7 +252,7 @@ export default function EvaluationForm({ currentUser, evaluationId, onClose }: E
     if (!loading) {
       loadIepps();
       setSelectedIeppId('');
-      setEvaluation(prev => ({ ...prev, etablissement_id: '', coges_id: undefined }));
+      setEvaluation(prev => ({ ...prev, etablissement_id: undefined, coges_id: undefined }));
       setEtablissementUpdates({});
       setCogesUpdates({});
     }
@@ -258,7 +260,7 @@ export default function EvaluationForm({ currentUser, evaluationId, onClose }: E
 
   useEffect(() => {
     if (!loading) {
-      setEvaluation(prev => ({ ...prev, etablissement_id: '', coges_id: undefined }));
+      setEvaluation(prev => ({ ...prev, etablissement_id: undefined, coges_id: undefined }));
       setEtablissementUpdates({});
       setCogesUpdates({});
     }
@@ -287,6 +289,27 @@ export default function EvaluationForm({ currentUser, evaluationId, onClose }: E
     if (isAuto) setAutoSaveStatus('saving');
     else setSaving(true);
 
+    const etablissementId = evaluation.etablissement_id || generateUUID();
+    const cogesId = evaluation.coges_id || generateUUID();
+    const evaluationToSave = {
+      ...evaluation,
+      id: evalId,
+      etablissement_id: etablissementId,
+      coges_id: cogesId
+    };
+    if (!evaluation.etablissement_id || !evaluation.coges_id) {
+      setEvaluation(prev => ({
+        ...prev,
+        etablissement_id: etablissementId,
+        coges_id: cogesId
+      }));
+    }
+
+    const etablissementToSave = {
+      ...etablissementUpdates,
+      iepp_id: etablissementUpdates.iepp_id || selectedIeppId || undefined
+    };
+
     // Prepare responses EAV structures from record map with stable IDs
     const mappedReponses: EvaluationReponse[] = Object.entries(reponses).map(([code, val]) => {
       let rId = reponseIds[code];
@@ -305,14 +328,14 @@ export default function EvaluationForm({ currentUser, evaluationId, onClose }: E
 
     try {
       const result = await DataService.saveDraft(
-        { ...evaluation, id: evalId },
+        evaluationToSave,
         mappedReponses,
         membresBe,
         equipes,
         recommandations,
         preuves,
         currentUser.id,
-        etablissementUpdates,
+        etablissementToSave,
         cogesUpdates
       );
       if (result.success) {
@@ -435,6 +458,44 @@ export default function EvaluationForm({ currentUser, evaluationId, onClose }: E
   // Handle etablissements-scoped question fields (Sections 1-2)
   const handleEtablissementPropChange = (column: string, value: any) => {
     setEtablissementUpdates(prev => ({ ...prev, [column]: value }));
+  };
+
+  const captureGpsPosition = () => {
+    if (!('geolocation' in navigator)) {
+      setGpsError("GPS non disponible sur cet appareil ou ce navigateur.");
+      return;
+    }
+
+    if (!window.isSecureContext) {
+      setGpsError("GPS bloqué par le navigateur : ouvrez l'application en HTTPS ou sur localhost.");
+      return;
+    }
+
+    setGpsLoading(true);
+    setGpsError(null);
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const latitude = Number(position.coords.latitude.toFixed(6));
+        const longitude = Number(position.coords.longitude.toFixed(6));
+        handleEtablissementPropChange('latitude', latitude);
+        handleEtablissementPropChange('longitude', longitude);
+        setGpsLoading(false);
+      },
+      (error) => {
+        const message =
+          error.code === error.PERMISSION_DENIED ? "Autorisation GPS refusée. Activez la localisation puis réessayez." :
+          error.code === error.POSITION_UNAVAILABLE ? "Position GPS indisponible. Vérifiez la connexion ou le signal." :
+          error.code === error.TIMEOUT ? "Le GPS met trop de temps à répondre. Réessayez à l'extérieur ou près d'une fenêtre." :
+          "Impossible de récupérer la position GPS.";
+        setGpsError(message);
+        setGpsLoading(false);
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 15000,
+        maximumAge: 30000
+      }
+    );
   };
 
   // Handle coges-scoped question fields (Sections 1-2)
@@ -1115,30 +1176,31 @@ export default function EvaluationForm({ currentUser, evaluationId, onClose }: E
 
                     {/* GPS CAPTURE FIELD */}
                     {q.type === 'gps' && (
-                      <div className="flex space-x-2">
-                        <input
-                          type="text"
-                          placeholder="Latitude, Longitude"
-                          className="flex-1 p-2 border border-gray-200 rounded-lg text-xs outline-none bg-gray-50"
-                          disabled
-                          value={
-                            etablissementUpdates.latitude !== undefined && etablissementUpdates.longitude !== undefined
-                              ? `${etablissementUpdates.latitude}, ${etablissementUpdates.longitude}`
-                              : 'GPS non disponible'
-                          }
-                        />
-                        <button
-                          type="button"
-                          onClick={() => {
-                            // Mock hardware capture (no real GPS access in this environment)
-                            handleEtablissementPropChange('latitude', 5.3484);
-                            handleEtablissementPropChange('longitude', -3.9842);
-                            alert('Coordonnées GPS capturées via le navigateur de la tablette (5.3484, -3.9842).');
-                          }}
-                          className="px-3 py-2 bg-indigo-50 border border-indigo-200 hover:bg-indigo-100 rounded-lg text-xs text-indigo-700 font-bold transition-all shrink-0"
-                        >
-                          Géolocaliser
-                        </button>
+                      <div className="space-y-1">
+                        <div className="flex space-x-2">
+                          <input
+                            type="text"
+                            placeholder="Latitude, Longitude"
+                            className="flex-1 p-2 border border-gray-200 rounded-lg text-xs outline-none bg-gray-50"
+                            disabled
+                            value={
+                              etablissementUpdates.latitude !== undefined && etablissementUpdates.longitude !== undefined
+                                ? `${etablissementUpdates.latitude}, ${etablissementUpdates.longitude}`
+                                : 'GPS à capturer'
+                            }
+                          />
+                          <button
+                            type="button"
+                            onClick={captureGpsPosition}
+                            disabled={gpsLoading}
+                            className="px-3 py-2 bg-indigo-50 border border-indigo-200 hover:bg-indigo-100 disabled:opacity-60 disabled:cursor-wait rounded-lg text-xs text-indigo-700 font-bold transition-all shrink-0"
+                          >
+                            {gpsLoading ? 'Localisation...' : 'Géolocaliser'}
+                          </button>
+                        </div>
+                        {gpsError && (
+                          <p className="text-[10px] text-red-600 font-semibold">{gpsError}</p>
+                        )}
                       </div>
                     )}
 
