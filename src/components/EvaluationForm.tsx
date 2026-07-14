@@ -79,6 +79,7 @@ export default function EvaluationForm({ currentUser, evaluationId, onClose }: E
   
   // Tracking
   const [saving, setSaving] = useState(false);
+  const [navigationSaving, setNavigationSaving] = useState(false);
   const [autoSaveStatus, setAutoSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'failed'>('idle');
   const [submissionErrors, setSubmissionErrors] = useState<string[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -89,12 +90,25 @@ export default function EvaluationForm({ currentUser, evaluationId, onClose }: E
   const [gpsError, setGpsError] = useState<string | null>(null);
   const draftEtablissementIdRef = useRef<string | null>(null);
   const draftCogesIdRef = useRef<string | null>(null);
+  const saveInFlightRef = useRef<Promise<{ success: boolean; error?: string }> | null>(null);
+  const evaluationRef = useRef<Partial<Evaluation>>({});
+  const reponsesRef = useRef<Record<string, string>>({});
+  const reponseIdsRef = useRef<Record<string, string>>({});
+  const etablissementUpdatesRef = useRef<Partial<Etablissement>>({});
+  const cogesUpdatesRef = useRef<Partial<Coges>>({});
+  const membresBeRef = useRef<MembreBe[]>([]);
+  const equipesRef = useRef<EquipeEvaluation[]>([]);
+  const recommandationsRef = useRef<Partial<Recommandation>>({});
+  const preuvesRef = useRef<PreuveDocumentaire[]>([]);
   
   // Form rendering helpers
   const sections = questionsErof.sections;
-  const currentSection = sections[activeSectionIdx];
+  const lastSectionIdx = Math.max(sections.length - 1, 0);
+  const safeActiveSectionIdx = Math.min(Math.max(activeSectionIdx, 0), lastSectionIdx);
+  const currentSection = sections[safeActiveSectionIdx] || sections[0];
   const isDraftLikeStatus = evaluation.statut === 'brouillon' || evaluation.statut === 'en_revision';
   const saveButtonLabel = isDraftLikeStatus ? 'Enregistrer brouillon' : 'Enregistrement verrouille';
+  const isFormBusy = saving || navigationSaving || isClosingDraft || isSubmitting || uploadingProofIdx !== null;
 
   // question_code -> section number, needed for evaluation_reponses.section_num (NOT NULL)
   const questionSectionMap = React.useMemo(() => {
@@ -105,6 +119,22 @@ export default function EvaluationForm({ currentUser, evaluationId, onClose }: E
 
   // Section 16 BE profiles sub-navigation (which of the 11 profiles is active)
   const [activeBeIdx, setActiveBeIdx] = useState(0);
+
+  useEffect(() => {
+    if (activeSectionIdx !== safeActiveSectionIdx) {
+      setActiveSectionIdx(safeActiveSectionIdx);
+    }
+  }, [activeSectionIdx, safeActiveSectionIdx]);
+
+  useEffect(() => { evaluationRef.current = evaluation; }, [evaluation]);
+  useEffect(() => { reponsesRef.current = reponses; }, [reponses]);
+  useEffect(() => { reponseIdsRef.current = reponseIds; }, [reponseIds]);
+  useEffect(() => { etablissementUpdatesRef.current = etablissementUpdates; }, [etablissementUpdates]);
+  useEffect(() => { cogesUpdatesRef.current = cogesUpdates; }, [cogesUpdates]);
+  useEffect(() => { membresBeRef.current = membresBe; }, [membresBe]);
+  useEffect(() => { equipesRef.current = equipes; }, [equipes]);
+  useEffect(() => { recommandationsRef.current = recommandations; }, [recommandations]);
+  useEffect(() => { preuvesRef.current = preuves; }, [preuves]);
 
   // Initialize and load
   useEffect(() => {
@@ -141,6 +171,15 @@ export default function EvaluationForm({ currentUser, evaluationId, onClose }: E
           setEquipes(details.equipes);
           setRecommandations(details.recommandations || {});
           setPreuves(details.preuves);
+          evaluationRef.current = details.evaluation;
+          reponsesRef.current = repMap;
+          reponseIdsRef.current = idMap;
+          etablissementUpdatesRef.current = details.evaluation.etablissement || {};
+          cogesUpdatesRef.current = details.evaluation.coges || {};
+          membresBeRef.current = details.membresBe;
+          equipesRef.current = details.equipes;
+          recommandationsRef.current = details.recommandations || {};
+          preuvesRef.current = details.preuves;
 
           // Resolve selected regional filters
           if (details.evaluation.etablissement) {
@@ -173,7 +212,7 @@ export default function EvaluationForm({ currentUser, evaluationId, onClose }: E
         }
 
         const todayStr = new Date().toISOString().split('T')[0];
-        setEvaluation({
+        const initialEvaluation = {
           id: newOrExistingId,
           campagne_id: activeCampagne?.id,
           enqueteur_id: currentUser.id,
@@ -184,7 +223,9 @@ export default function EvaluationForm({ currentUser, evaluationId, onClose }: E
           effectif_total: 0,
           effectif_filles: 0,
           effectif_garcons: 0
-        });
+        };
+        evaluationRef.current = initialEvaluation;
+        setEvaluation(initialEvaluation);
 
         // Initialize empty repeat structures
         // Section 16 members BE initial setup (11 empty objects)
@@ -202,6 +243,7 @@ export default function EvaluationForm({ currentUser, evaluationId, onClose }: E
           formation_coges: false,
           maitrise_role: 'moyenne' as any
         }));
+        membresBeRef.current = initialBeList;
         setMembresBe(initialBeList);
 
         // Section 17 proofs checklist initial setup (20 entries)
@@ -212,19 +254,22 @@ export default function EvaluationForm({ currentUser, evaluationId, onClose }: E
           statut: 'non_disponible' as any,
           commentaire: ''
         }));
+        preuvesRef.current = initialProofs;
         setPreuves(initialProofs);
 
         // Section 20 initial evaluation team (starts with 1 line pre-filled with current user)
-        setEquipes([
+        const initialEquipe = [
           {
             id: generateUUID(),
             evaluation_id: newOrExistingId,
             nom_prenoms: `${currentUser.prenom} ${currentUser.nom}`,
             fonction_structure: 'Enquêteur terrain'
           }
-        ]);
+        ];
+        equipesRef.current = initialEquipe;
+        setEquipes(initialEquipe);
 
-        setRecommandations({
+        const initialRecommandations = {
           id: generateUUID(),
           evaluation_id: newOrExistingId,
           forces: '',
@@ -233,7 +278,9 @@ export default function EvaluationForm({ currentUser, evaluationId, onClose }: E
           actions_urgentes: '',
           appuis_attendus: '',
           recommandations_prioritaires: ''
-        });
+        };
+        recommandationsRef.current = initialRecommandations;
+        setRecommandations(initialRecommandations);
       }
 
       setLoading(false);
@@ -257,6 +304,9 @@ export default function EvaluationForm({ currentUser, evaluationId, onClose }: E
       setSelectedIeppId('');
       draftEtablissementIdRef.current = null;
       draftCogesIdRef.current = null;
+      evaluationRef.current = { ...evaluationRef.current, etablissement_id: undefined, coges_id: undefined };
+      etablissementUpdatesRef.current = {};
+      cogesUpdatesRef.current = {};
       setEvaluation(prev => ({ ...prev, etablissement_id: undefined, coges_id: undefined }));
       setEtablissementUpdates({});
       setCogesUpdates({});
@@ -267,6 +317,9 @@ export default function EvaluationForm({ currentUser, evaluationId, onClose }: E
     if (!loading) {
       draftEtablissementIdRef.current = null;
       draftCogesIdRef.current = null;
+      evaluationRef.current = { ...evaluationRef.current, etablissement_id: undefined, coges_id: undefined };
+      etablissementUpdatesRef.current = {};
+      cogesUpdatesRef.current = {};
       setEvaluation(prev => ({ ...prev, etablissement_id: undefined, coges_id: undefined }));
       setEtablissementUpdates({});
       setCogesUpdates({});
@@ -276,16 +329,16 @@ export default function EvaluationForm({ currentUser, evaluationId, onClose }: E
   // Autosaver trigger (every 30 seconds)
   useEffect(() => {
     const interval = setInterval(() => {
-      if (!isClosingDraft && !isSubmitting && isDraftLikeStatus) {
+      if (!isFormBusy && isDraftLikeStatus) {
         saveDraft(true);
       }
     }, 30000);
 
     return () => clearInterval(interval);
-  }, [evaluation, reponses, etablissementUpdates, cogesUpdates, membresBe, equipes, recommandations, preuves, isClosingDraft, isSubmitting, isDraftLikeStatus]);
+  }, [evaluation, reponses, etablissementUpdates, cogesUpdates, membresBe, equipes, recommandations, preuves, isFormBusy, isDraftLikeStatus]);
 
   // Primary draft saver
-  const saveDraft = async (
+  const performSaveDraft = async (
     isAuto = false,
     overrides?: { preuves?: PreuveDocumentaire[] }
   ): Promise<{ success: boolean; error?: string }> => {
@@ -299,17 +352,31 @@ export default function EvaluationForm({ currentUser, evaluationId, onClose }: E
     if (isAuto) setAutoSaveStatus('saving');
     else setSaving(true);
 
-    const etablissementId = evaluation.etablissement_id || draftEtablissementIdRef.current || generateUUID();
-    const cogesId = evaluation.coges_id || draftCogesIdRef.current || generateUUID();
+    const latestEvaluation = evaluationRef.current;
+    const latestEtablissementUpdates = etablissementUpdatesRef.current;
+    const latestCogesUpdates = cogesUpdatesRef.current;
+    const latestReponses = reponsesRef.current;
+    const latestReponseIds = reponseIdsRef.current;
+    const latestMembresBe = membresBeRef.current;
+    const latestEquipes = equipesRef.current;
+    const latestRecommandations = recommandationsRef.current;
+    const etablissementId = latestEvaluation.etablissement_id || draftEtablissementIdRef.current || generateUUID();
+    const cogesId = latestEvaluation.coges_id || draftCogesIdRef.current || generateUUID();
     draftEtablissementIdRef.current = etablissementId;
     draftCogesIdRef.current = cogesId;
     const evaluationToSave = {
-      ...evaluation,
+      ...latestEvaluation,
       id: evalId,
       etablissement_id: etablissementId,
       coges_id: cogesId
     };
-    if (!evaluation.etablissement_id || !evaluation.coges_id) {
+    if (!latestEvaluation.etablissement_id || !latestEvaluation.coges_id) {
+      const nextEvaluation = {
+        ...latestEvaluation,
+        etablissement_id: etablissementId,
+        coges_id: cogesId
+      };
+      evaluationRef.current = nextEvaluation;
       setEvaluation(prev => ({
         ...prev,
         etablissement_id: etablissementId,
@@ -318,16 +385,40 @@ export default function EvaluationForm({ currentUser, evaluationId, onClose }: E
     }
 
     const etablissementToSave = {
-      ...etablissementUpdates,
-      iepp_id: etablissementUpdates.iepp_id || selectedIeppId || undefined
+      ...latestEtablissementUpdates,
+      iepp_id: latestEtablissementUpdates.iepp_id || selectedIeppId || undefined
     };
-    const preuvesToSave = overrides?.preuves || preuves;
+    const preuvesToSave = overrides?.preuves || preuvesRef.current;
+    const membresBeToSave = latestMembresBe.map((member) => ({
+      ...member,
+      evaluation_id: evalId
+    }));
+    const equipesToSave = latestEquipes.map((member) => ({
+      ...member,
+      evaluation_id: evalId
+    }));
+    const recommandationsToSave = latestRecommandations
+      ? {
+          ...latestRecommandations,
+          id: latestRecommandations.id || generateUUID(),
+          evaluation_id: evalId
+        }
+      : latestRecommandations;
+    const preuvesNormalizedToSave = preuvesToSave.map((proof) => ({
+      ...proof,
+      evaluation_id: evalId
+    }));
+    membresBeRef.current = membresBeToSave;
+    equipesRef.current = equipesToSave;
+    recommandationsRef.current = recommandationsToSave || {};
+    preuvesRef.current = preuvesNormalizedToSave;
 
     // Prepare responses EAV structures from record map with stable IDs
-    const mappedReponses: EvaluationReponse[] = Object.entries(reponses).map(([code, val]) => {
-      let rId = reponseIds[code];
+    const mappedReponses: EvaluationReponse[] = Object.entries(latestReponses).map(([code, val]) => {
+      let rId = latestReponseIds[code];
       if (!rId) {
         rId = generateUUID();
+        reponseIdsRef.current = { ...reponseIdsRef.current, [code]: rId };
         setReponseIds(prev => ({ ...prev, [code]: rId }));
       }
       return {
@@ -343,13 +434,13 @@ export default function EvaluationForm({ currentUser, evaluationId, onClose }: E
       const result = await DataService.saveDraft(
         evaluationToSave,
         mappedReponses,
-        membresBe,
-        equipes,
-        recommandations,
-        preuvesToSave,
+        membresBeToSave,
+        equipesToSave,
+        recommandationsToSave,
+        preuvesNormalizedToSave,
         currentUser.id,
         etablissementToSave,
-        cogesUpdates
+        latestCogesUpdates
       );
       if (result.success) {
         if (isAuto) {
@@ -379,8 +470,52 @@ export default function EvaluationForm({ currentUser, evaluationId, onClose }: E
     }
   };
 
+  const saveDraft = async (
+    isAuto = false,
+    overrides?: { preuves?: PreuveDocumentaire[] }
+  ): Promise<{ success: boolean; error?: string }> => {
+    if (saveInFlightRef.current) {
+      await saveInFlightRef.current.catch(() => undefined);
+    }
+
+    const savePromise = performSaveDraft(isAuto, overrides);
+    saveInFlightRef.current = savePromise;
+    try {
+      return await savePromise;
+    } finally {
+      if (saveInFlightRef.current === savePromise) {
+        saveInFlightRef.current = null;
+      }
+    }
+  };
+
+  const navigateToSection = async (targetIdx: number) => {
+    if (!isDraftLikeStatus || isFormBusy) return;
+
+    const nextIdx = Math.min(Math.max(targetIdx, 0), lastSectionIdx);
+    if (nextIdx === safeActiveSectionIdx) return;
+
+    setSubmissionErrors([]);
+    setNavigationSaving(true);
+    try {
+      const result = await saveDraft(true);
+      if (result.success) {
+        setActiveSectionIdx(nextIdx);
+        return;
+      }
+
+      const error = result.error || 'La sauvegarde du brouillon a echoue.';
+      setSubmissionErrors([error]);
+      alert(error);
+    } finally {
+      setNavigationSaving(false);
+    }
+  };
+
   // Submit definitively
   const handleSubmitDefinitively = async () => {
+    if (isFormBusy) return;
+
     if (noActiveCampagne) {
       alert('Aucune campagne active n\'est configurée. Veuillez contacter l\'administrateur.');
       return;
@@ -416,6 +551,8 @@ export default function EvaluationForm({ currentUser, evaluationId, onClose }: E
   };
 
   const handleSaveAndClose = async () => {
+    if (isFormBusy) return;
+
     setSubmissionErrors([]);
     setIsClosingDraft(true);
 
@@ -434,15 +571,25 @@ export default function EvaluationForm({ currentUser, evaluationId, onClose }: E
 
   // Handle specific question responses
   const handleAnswerChange = (code: string, value: string) => {
+    reponsesRef.current = {
+      ...reponsesRef.current,
+      [code]: value
+    };
     setReponses(prev => ({
       ...prev,
       [code]: value
     }));
+    if (!reponseIdsRef.current[code]) {
+      reponseIdsRef.current = {
+        ...reponseIdsRef.current,
+        [code]: generateUUID()
+      };
+    }
     setReponseIds(prev => {
       if (prev[code]) return prev;
       return {
         ...prev,
-        [code]: generateUUID()
+        [code]: reponseIdsRef.current[code]
       };
     });
   };
@@ -458,9 +605,14 @@ export default function EvaluationForm({ currentUser, evaluationId, onClose }: E
           const g = parseInt(column === 'effectif_garcons' ? value : (next.effectif_garcons || 0), 10);
           next.effectif_total = (isNaN(f) ? 0 : f) + (isNaN(g) ? 0 : g);
         }
+        evaluationRef.current = next;
         return next;
       });
     } else if (table === 'recommandations') {
+      recommandationsRef.current = {
+        ...recommandationsRef.current,
+        [column]: value
+      };
       setRecommandations(prev => ({
         ...prev,
         [column]: value
@@ -470,6 +622,10 @@ export default function EvaluationForm({ currentUser, evaluationId, onClose }: E
 
   // Handle etablissements-scoped question fields (Sections 1-2)
   const handleEtablissementPropChange = (column: string, value: any) => {
+    etablissementUpdatesRef.current = {
+      ...etablissementUpdatesRef.current,
+      [column]: value
+    };
     setEtablissementUpdates(prev => ({ ...prev, [column]: value }));
   };
 
@@ -513,6 +669,10 @@ export default function EvaluationForm({ currentUser, evaluationId, onClose }: E
 
   // Handle coges-scoped question fields (Sections 1-2)
   const handleCogesPropChange = (column: string, value: any) => {
+    cogesUpdatesRef.current = {
+      ...cogesUpdatesRef.current,
+      [column]: value
+    };
     setCogesUpdates(prev => ({ ...prev, [column]: value }));
   };
 
@@ -533,6 +693,12 @@ export default function EvaluationForm({ currentUser, evaluationId, onClose }: E
 
   // Handle Repeat section 16 (Members BE)
   const handleMemberPropChange = (idx: number, column: string, value: any) => {
+    const latest = [...membresBeRef.current];
+    latest[idx] = {
+      ...latest[idx],
+      [column]: value
+    };
+    membresBeRef.current = latest;
     setMembresBe(prev => {
       const next = [...prev];
       next[idx] = {
@@ -545,6 +711,12 @@ export default function EvaluationForm({ currentUser, evaluationId, onClose }: E
 
   // Handle Repeat section 17 (Proofs)
   const handleProofPropChange = (idx: number, column: string, value: any) => {
+    const latest = [...preuvesRef.current];
+    latest[idx] = {
+      ...latest[idx],
+      [column]: value
+    };
+    preuvesRef.current = latest;
     setPreuves(prev => {
       const next = [...prev];
       next[idx] = {
@@ -577,9 +749,14 @@ export default function EvaluationForm({ currentUser, evaluationId, onClose }: E
         return;
       }
 
-      const result = await DataService.uploadPreuveFile(evalId, preuves[idx].type_preuve, file);
+      const proofType = preuvesRef.current[idx]?.type_preuve || preuves[idx]?.type_preuve;
+      if (!proofType) {
+        alert('Veuillez selectionner le type de preuve avant d\'envoyer un fichier.');
+        return;
+      }
+      const result = await DataService.uploadPreuveFile(evalId, proofType, file);
       if (result.success && result.filePath) {
-        const nextPreuves = preuves.map((proof, proofIdx) => (
+        const nextPreuves = preuvesRef.current.map((proof, proofIdx) => (
           proofIdx === idx
             ? {
                 ...proof,
@@ -589,6 +766,7 @@ export default function EvaluationForm({ currentUser, evaluationId, onClose }: E
               }
             : proof
         ));
+        preuvesRef.current = nextPreuves;
         setPreuves(nextPreuves);
 
         const persistResult = await saveDraft(true, { preuves: nextPreuves });
@@ -637,30 +815,40 @@ export default function EvaluationForm({ currentUser, evaluationId, onClose }: E
 
   // Handle Repeat section 20 (Team addition/deletion)
   const handleTeamMemberAdd = () => {
-    if (equipes.length >= 4) {
+    if (equipesRef.current.length >= 4) {
       alert('Maximum 4 évaluateurs autorisés.');
       return;
     }
-    setEquipes(prev => [
-      ...prev,
+    const next = [
+      ...equipesRef.current,
       {
         id: generateUUID(),
         evaluation_id: evalId,
         nom_prenoms: '',
         fonction_structure: ''
       }
-    ]);
+    ];
+    equipesRef.current = next;
+    setEquipes(next);
   };
 
   const handleTeamMemberRemove = (idx: number) => {
-    if (equipes.length <= 1) {
+    if (equipesRef.current.length <= 1) {
       alert('Au moins un évaluateur requis.');
       return;
     }
-    setEquipes(prev => prev.filter((_, i) => i !== idx));
+    const next = equipesRef.current.filter((_, i) => i !== idx);
+    equipesRef.current = next;
+    setEquipes(next);
   };
 
   const handleTeamPropChange = (idx: number, column: string, value: any) => {
+    const latest = [...equipesRef.current];
+    latest[idx] = {
+      ...latest[idx],
+      [column]: value
+    };
+    equipesRef.current = latest;
     setEquipes(prev => {
       const next = [...prev];
       next[idx] = {
@@ -673,12 +861,19 @@ export default function EvaluationForm({ currentUser, evaluationId, onClose }: E
 
   // Free-text entry of the etablissement name (no pre-existing referential list)
   const handleEtablissementNameChange = (nom: string) => {
-    setEvaluation(prev => ({
-      ...prev,
-      etablissement_id: prev.etablissement_id || generateUUID(),
-      coges_id: prev.coges_id || generateUUID()
-    }));
-    setEtablissementUpdates(prev => ({ ...prev, nom, iepp_id: selectedIeppId }));
+    const nextEvaluation = {
+      ...evaluationRef.current,
+      etablissement_id: evaluationRef.current.etablissement_id || generateUUID(),
+      coges_id: evaluationRef.current.coges_id || generateUUID()
+    };
+    evaluationRef.current = nextEvaluation;
+    etablissementUpdatesRef.current = {
+      ...etablissementUpdatesRef.current,
+      nom,
+      iepp_id: selectedIeppId
+    };
+    setEvaluation(nextEvaluation);
+    setEtablissementUpdates(etablissementUpdatesRef.current);
   };
 
   if (loading) {
@@ -714,21 +909,19 @@ export default function EvaluationForm({ currentUser, evaluationId, onClose }: E
         <div className="flex-1 overflow-y-auto max-h-[480px]" id="sections-nav">
           <nav className="p-2 space-y-1">
             {sections.map((sect, idx) => {
-              const isActive = idx === activeSectionIdx;
-              const isCompleted = idx < activeSectionIdx; // Mock simple completion trace
+              const isActive = idx === safeActiveSectionIdx;
+              const isCompleted = idx < safeActiveSectionIdx; // Mock simple completion trace
               
               return (
                 <button
                   key={sect.num}
-                  onClick={async () => {
-                    await saveDraft(true);
-                    setActiveSectionIdx(idx);
-                  }}
+                  onClick={() => navigateToSection(idx)}
+                  disabled={!isDraftLikeStatus || isFormBusy}
                   className={`w-full text-left p-2.5 rounded text-xs font-bold flex items-center justify-between transition-all ${
                     isActive 
                       ? 'bg-[#1E293B] text-white border-l-4 border-l-amber-500 shadow-sm' 
                       : 'text-slate-700 hover:bg-slate-100'
-                  }`}
+                  } disabled:opacity-50 disabled:cursor-not-allowed`}
                 >
                   <div className="flex items-center space-x-2.5 min-w-0">
                     <span className={`h-5 w-5 shrink-0 rounded-full flex items-center justify-center text-[10px] ${
@@ -749,11 +942,11 @@ export default function EvaluationForm({ currentUser, evaluationId, onClose }: E
         <div className="p-4 border-t border-slate-200 bg-white">
           <button
             onClick={() => saveDraft(false)}
-            disabled={noActiveCampagne || saving || isClosingDraft || isSubmitting}
+            disabled={noActiveCampagne || isFormBusy}
             className="w-full bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold py-2 px-3 rounded border border-slate-200 text-xs transition-colors flex items-center justify-center space-x-2 shadow-sm disabled:opacity-40 disabled:cursor-not-allowed"
           >
-            {saving ? <Loader className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
-            <span>{saving ? 'Enregistrement...' : saveButtonLabel}</span>
+            {saving || navigationSaving ? <Loader className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+            <span>{saving || navigationSaving ? 'Enregistrement...' : saveButtonLabel}</span>
           </button>
         </div>
       </div>
@@ -766,13 +959,13 @@ export default function EvaluationForm({ currentUser, evaluationId, onClose }: E
           <div className="flex items-center justify-between">
             <button 
               onClick={handleSaveAndClose}
-              disabled={isClosingDraft || saving || isSubmitting}
+              disabled={isFormBusy}
               className="text-xs font-bold text-slate-500 hover:text-slate-800 flex items-center space-x-1 uppercase tracking-wider disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isClosingDraft ? <Loader className="h-4 w-4 animate-spin" /> : <ArrowLeft className="h-4 w-4" />}
               <span>{isClosingDraft ? 'Sauvegarde...' : 'Enregistrer et quitter'}</span>
             </button>
-            <span className="text-[11px] font-bold text-amber-600 bg-amber-50 border border-amber-200 px-2.5 py-0.5 rounded uppercase tracking-wider">Étape {activeSectionIdx + 1} sur 20</span>
+            <span className="text-[11px] font-bold text-amber-600 bg-amber-50 border border-amber-200 px-2.5 py-0.5 rounded uppercase tracking-wider">Étape {safeActiveSectionIdx + 1} sur 20</span>
           </div>
 
           <h2 className="text-xl font-extrabold text-slate-800 flex items-center gap-2">
@@ -1266,34 +1459,29 @@ export default function EvaluationForm({ currentUser, evaluationId, onClose }: E
         <div className="border-t border-slate-200 pt-5 flex items-center justify-between gap-4">
           <button
             type="button"
-            disabled={activeSectionIdx === 0}
-            onClick={async () => {
-              await saveDraft(true);
-              setActiveSectionIdx(prev => prev - 1);
-            }}
-            className="flex items-center space-x-1 px-4 py-2 border border-slate-200 hover:bg-slate-50 text-slate-700 rounded text-xs font-bold transition-all disabled:opacity-40"
+            disabled={safeActiveSectionIdx === 0 || !isDraftLikeStatus || isFormBusy}
+            onClick={() => navigateToSection(safeActiveSectionIdx - 1)}
+            className="flex items-center space-x-1 px-4 py-2 border border-slate-200 hover:bg-slate-50 text-slate-700 rounded text-xs font-bold transition-all disabled:opacity-40 disabled:cursor-not-allowed"
           >
-            <ArrowLeft className="h-4 w-4" />
+            {navigationSaving ? <Loader className="h-4 w-4 animate-spin" /> : <ArrowLeft className="h-4 w-4" />}
             <span>Précédent</span>
           </button>
 
-          {activeSectionIdx < sections.length - 1 ? (
+          {safeActiveSectionIdx < lastSectionIdx ? (
             <button
               type="button"
-              onClick={async () => {
-                await saveDraft(true);
-                setActiveSectionIdx(prev => prev + 1);
-              }}
-              className="flex items-center space-x-1 px-5 py-2.5 bg-[#0F172A] hover:bg-[#1E293B] text-white hover:text-amber-400 border border-slate-800 rounded text-xs font-bold shadow-sm transition-all"
+              disabled={!isDraftLikeStatus || isFormBusy}
+              onClick={() => navigateToSection(safeActiveSectionIdx + 1)}
+              className="flex items-center space-x-1 px-5 py-2.5 bg-[#0F172A] hover:bg-[#1E293B] text-white hover:text-amber-400 border border-slate-800 rounded text-xs font-bold shadow-sm transition-all disabled:opacity-40 disabled:cursor-not-allowed"
             >
               <span>Suivant</span>
-              <ArrowRight className="h-4 w-4" />
+              {navigationSaving ? <Loader className="h-4 w-4 animate-spin" /> : <ArrowRight className="h-4 w-4" />}
             </button>
           ) : (
             // Final submit definitively button (on last step 20)
             <button
               type="button"
-              disabled={isSubmitting || noActiveCampagne}
+              disabled={isFormBusy || noActiveCampagne}
               onClick={handleSubmitDefinitively}
               className="flex items-center space-x-2 px-6 py-3 bg-amber-500 hover:bg-amber-600 text-slate-900 rounded text-xs font-black shadow-md border border-amber-600 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
             >
