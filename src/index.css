@@ -15,14 +15,14 @@ html {
   background: #f4f7fb;
   font-size: 16px;
   width: 100%;
-  overflow-x: hidden;
+  overflow-x: clip;
 }
 
 body {
   font-family: var(--font-sans);
   min-width: 320px;
   width: 100%;
-  overflow-x: hidden;
+  overflow-x: clip;
   background:
     linear-gradient(180deg, #f8fafc 0%, #f4f7fb 44%, #eef3f9 100%);
   color: #172033;
@@ -36,12 +36,19 @@ body {
 #root {
   min-height: 100vh;
   width: 100%;
-  overflow-x: hidden;
+  overflow-x: clip;
 }
 
 .app-shell {
   width: min(calc(100vw - 2rem), 1480px);
   margin-inline: auto;
+}
+
+.app-primary-nav {
+  position: sticky;
+  position: -webkit-sticky;
+  top: 0;
+  z-index: 50;
 }
 
 @media (max-width: 640px) {

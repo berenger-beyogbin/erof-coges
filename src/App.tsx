@@ -246,7 +246,7 @@ export default function App() {
       </header>
 
       {/* Primary Navigation Tabs */}
-      <div className="sticky top-0 z-40 bg-[#1E293B] border-b border-slate-700 shadow-sm text-slate-300">
+      <div className="app-primary-nav bg-[#1E293B] border-b border-slate-700 shadow-sm text-slate-300">
         <div className="app-shell flex flex-col xl:flex-row xl:items-center justify-between py-1 gap-2">
           
           <div className="flex flex-wrap items-center gap-2 py-2 min-w-0">
