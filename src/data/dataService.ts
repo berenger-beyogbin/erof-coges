@@ -82,6 +82,66 @@ function buildEquipeEvaluationPayload(
   };
 }
 
+function buildEvaluationReponsePayload(
+  response: EvaluationReponse,
+  evaluationId: string,
+  now: string,
+  existingId?: string
+): EvaluationReponse & { updated_at: string } {
+  const numericValue = Number(response.valeur_numerique);
+  return {
+    ...response,
+    id: cleanUuid(existingId) || cleanUuid(response.id) || crypto.randomUUID(),
+    evaluation_id: evaluationId,
+    question_code: String(response.question_code || ''),
+    section_num: response.section_num || 0,
+    valeur_numerique: Number.isFinite(numericValue) ? numericValue : null,
+    updated_at: now
+  };
+}
+
+function hasFilledMembreBeProfile(member: Partial<MembreBe> | undefined): boolean {
+  if (!member) return false;
+  return [
+    member.nom_prenoms,
+    member.profession,
+    member.module_formation
+  ].some(value => typeof value === 'string' && value.trim().length > 0)
+    || member.formation_coges === true
+    || member.lit_ecrit_francais !== true
+    || member.lit_ecrit_langue_locale !== false
+    || member.niveau_etude !== 'primaire'
+    || member.maitrise_role !== 'moyenne';
+}
+
+function buildEvaluationScorePayload(
+  score: EvaluationScore,
+  existingScore: EvaluationScore | null | undefined,
+  now: string
+): EvaluationScore & { updated_at: string } {
+  return {
+    id: existingScore?.id || crypto.randomUUID(),
+    evaluation_id: score.evaluation_id,
+    score_global: score.score_global,
+    classification: score.classification,
+    taux_disponibilite_preuves: score.taux_disponibilite_preuves,
+    axes_faibles: score.axes_faibles,
+    score_axe1: score.score_axe1,
+    score_axe2: score.score_axe2,
+    score_axe3: score.score_axe3,
+    score_axe4: score.score_axe4,
+    score_axe5: score.score_axe5,
+    score_axe6: score.score_axe6,
+    score_axe7: score.score_axe7,
+    score_axe8: score.score_axe8,
+    score_axe9: score.score_axe9,
+    score_axe10: score.score_axe10,
+    score_axe11: score.score_axe11,
+    score_axe12: score.score_axe12,
+    updated_at: now
+  };
+}
+
 function normalizePreuveStoragePath(filePath: string): string {
   return filePath
     .trim()
@@ -156,15 +216,16 @@ export function computeEvaluationScores(
   const score_axe10 = avgCodes(['14.1']);
   const score_axe11 = avgCodes(['15.1']);
 
+  const filledMembresBe = membresBe.filter(hasFilledMembreBeProfile);
   let score_axe12 = 3.0;
-  if (membresBe.length > 0) {
+  if (filledMembresBe.length > 0) {
     let trainingSum = 0;
     let masterySum = 0;
-    membresBe.forEach(m => {
+    filledMembresBe.forEach(m => {
       trainingSum += m.formation_coges ? 5 : 1;
       masterySum += m.maitrise_role === 'bonne' ? 5 : m.maitrise_role === 'moyenne' ? 3 : 1;
     });
-    score_axe12 = parseFloat(((trainingSum / membresBe.length + masterySum / membresBe.length) / 2).toFixed(2));
+    score_axe12 = parseFloat(((trainingSum / filledMembresBe.length + masterySum / filledMembresBe.length) / 2).toFixed(2));
   }
 
   const weights = {
@@ -713,6 +774,21 @@ export class LocalDemoService {
     let auditApres: any = { statut: newStatus };
 
     if (evIndex >= 0) {
+      if (newStatus === 'valide') {
+        const details = await this.getEvaluationDetails(id);
+        if (details) {
+          const finalScore = computeEvaluationScores(id, details.reponses, details.membresBe, details.preuves);
+          const allScores = getStoredItem<EvaluationScore[]>('scores', []);
+          const scIndex = allScores.findIndex(s => s.evaluation_id === id);
+          if (scIndex >= 0) {
+            allScores[scIndex] = finalScore;
+          } else {
+            allScores.push(finalScore);
+          }
+          setStoredItem<EvaluationScore[]>('scores', allScores);
+        }
+      }
+
       const updatedEval = {
         ...evals[evIndex],
         statut: newStatus,
@@ -1110,11 +1186,19 @@ export class SupabaseDataService {
     
     if (error) throw error;
 
-    return (data || []).map((d: any) => {
+    return await Promise.all((data || []).map(async (d: any) => {
       const etab = d.etablissements;
       const iepp = etab?.iepps;
       const drena = iepp?.drenas;
-      const scoreObj = d.evaluation_scores?.[0] || d.evaluation_scores;
+      let scoreObj = d.evaluation_scores?.[0] || d.evaluation_scores;
+      if (!scoreObj && ['valide', 'verrouille'].includes(d.statut)) {
+        const backfillResult = await this.calculateAndSaveEvaluationScore(d.id);
+        if (backfillResult.success) {
+          scoreObj = backfillResult.score;
+        } else {
+          console.warn(`Impossible de recalculer le score de l'evaluation ${d.id}: ${backfillResult.error}`);
+        }
+      }
       const score_global = Array.isArray(scoreObj) ? scoreObj[0]?.score_global : scoreObj?.score_global;
       const classification = Array.isArray(scoreObj) ? scoreObj[0]?.classification : scoreObj?.classification;
 
@@ -1127,7 +1211,7 @@ export class SupabaseDataService {
         classification: classification,
         scores: Array.isArray(scoreObj) ? scoreObj[0] : scoreObj
       };
-    });
+    }));
   }
 
   static async getEvaluationDetails(id: string): Promise<{
@@ -1304,7 +1388,13 @@ export class SupabaseDataService {
 
     // Batch upserts of related entities
     if (reponses.length > 0) {
-      const { error: repErr } = await supabase!.from('evaluation_reponses').upsert(reponses);
+      const existingResponseIds = new Map((existingDetails?.reponses || []).map(response => [response.question_code, response.id]));
+      const reponsesPayload = reponses.map(response =>
+        buildEvaluationReponsePayload(response, evaluationId, now, existingResponseIds.get(response.question_code))
+      );
+      const { error: repErr } = await supabase!
+        .from('evaluation_reponses')
+        .upsert(reponsesPayload, { onConflict: 'evaluation_id,question_code' });
       if (repErr) return { success: false, error: 'Erreur de sauvegarde des réponses: ' + repErr.message };
     }
     if (membresBe.length > 0) {
@@ -1341,6 +1431,50 @@ export class SupabaseDataService {
     return { success: true };
   }
 
+  private static async saveEvaluationScore(
+    score: EvaluationScore,
+    now: string
+  ): Promise<{ success: boolean; error?: string }> {
+    const { data: existingScore, error: selectErr } = await supabase!
+      .from('evaluation_scores')
+      .select('*')
+      .eq('evaluation_id', score.evaluation_id)
+      .maybeSingle();
+
+    if (selectErr) {
+      return { success: false, error: 'Erreur de lecture du score existant: ' + selectErr.message };
+    }
+
+    const payload = buildEvaluationScorePayload(score, existingScore as EvaluationScore | null, now);
+    const { error } = await supabase!
+      .from('evaluation_scores')
+      .upsert(payload, { onConflict: 'evaluation_id' });
+
+    if (error) {
+      return { success: false, error: 'Erreur de sauvegarde du score: ' + error.message };
+    }
+
+    return { success: true };
+  }
+
+  private static async calculateAndSaveEvaluationScore(
+    evaluationId: string,
+    now = new Date().toISOString()
+  ): Promise<{ success: boolean; score?: EvaluationScore; error?: string }> {
+    const details = await this.getEvaluationDetails(evaluationId);
+    if (!details) {
+      return { success: false, error: 'Évaluation introuvable pour le calcul du score.' };
+    }
+
+    const score = computeEvaluationScores(evaluationId, details.reponses, details.membresBe, details.preuves);
+    const result = await this.saveEvaluationScore(score, now);
+    if (!result.success) {
+      return { success: false, error: result.error };
+    }
+
+    return { success: true, score };
+  }
+
   static async submitEvaluation(id: string, userId: string): Promise<{ success: boolean; errors?: string[] }> {
     const now = new Date().toISOString();
 
@@ -1371,6 +1505,12 @@ export class SupabaseDataService {
       return { success: false, errors };
     }
 
+    const computedScore = computeEvaluationScores(id, reponses, membresBe, preuves);
+    const scoreResult = await this.saveEvaluationScore(computedScore, now);
+    if (!scoreResult.success) {
+      return { success: false, errors: [scoreResult.error || 'Erreur de calcul du score.'] };
+    }
+
     const { error: evErr } = await supabase!
       .from('evaluations')
       .update({
@@ -1390,7 +1530,7 @@ export class SupabaseDataService {
       .eq('evaluation_id', id)
       .maybeSingle();
 
-    if (!officialScore) {
+    if (false && !officialScore) {
       // Calculate and save preview score since no database-side calculation was found.
       // Deliberately insert() rather than upsert(): upsert compiles to INSERT ... ON
       // CONFLICT DO UPDATE, which requires the UPDATE RLS policy to hold too even
@@ -1426,6 +1566,18 @@ export class SupabaseDataService {
     userId: string
   ): Promise<{ success: boolean; error?: string }> {
     const now = new Date().toISOString();
+
+    if (newStatus === 'valide') {
+      const details = await this.getEvaluationDetails(id);
+      if (!details) {
+        return { success: false, error: 'Évaluation introuvable pour le calcul du score.' };
+      }
+      const computedScore = computeEvaluationScores(id, details.reponses, details.membresBe, details.preuves);
+      const scoreResult = await this.saveEvaluationScore(computedScore, now);
+      if (!scoreResult.success) {
+        return { success: false, error: scoreResult.error || 'Erreur de calcul du score.' };
+      }
+    }
 
     const updatePayload: any = {
       statut: newStatus,

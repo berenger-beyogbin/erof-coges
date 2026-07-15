@@ -424,6 +424,7 @@ export default function EvaluationForm({ currentUser, evaluationId, onClose }: E
 
     // Prepare responses EAV structures from record map with stable IDs
     const mappedReponses: EvaluationReponse[] = Object.entries(latestReponses).map(([code, val]) => {
+      const numericValue = parseInt(val as string, 10);
       let rId = latestReponseIds[code];
       if (!rId) {
         rId = generateUUID();
@@ -435,7 +436,7 @@ export default function EvaluationForm({ currentUser, evaluationId, onClose }: E
         evaluation_id: evalId,
         question_code: code,
         section_num: questionSectionMap[code] || 0,
-        valeur_numerique: parseInt(val as string, 10)
+        valeur_numerique: Number.isFinite(numericValue) ? numericValue : null
       };
     });
 

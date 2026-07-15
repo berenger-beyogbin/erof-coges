@@ -473,7 +473,7 @@ export default function Dashboard({ currentUser, onEditEvaluation, onNewEvaluati
           return [
             e.id,
             e.etablissement_nom || '',
-            e.score_global ? String(e.score_global) : 'N/A',
+            e.score_global !== undefined && e.score_global !== null ? String(e.score_global) : 'N/A',
             e.classification || 'N/A',
             sc.taux_disponibilite_preuves !== undefined ? `${sc.taux_disponibilite_preuves}%` : 'N/A',
             sc.score_axe1 !== undefined ? String(sc.score_axe1) : 'N/A',
@@ -583,7 +583,7 @@ export default function Dashboard({ currentUser, onEditEvaluation, onNewEvaluati
 
   const averageScore = parseFloat(
     (filteredEvaluations.reduce((acc, curr) => acc + (curr.score_global || 0), 0) / 
-    (filteredEvaluations.filter(e => e.score_global).length || 1)).toFixed(2)
+    (filteredEvaluations.filter(e => e.score_global !== undefined && e.score_global !== null).length || 1)).toFixed(2)
   );
 
   return (
@@ -799,6 +799,7 @@ export default function Dashboard({ currentUser, onEditEvaluation, onNewEvaluati
 
                     const isSelected = selectedEvalId === ev.id;
                     const isEditable = canEditEvaluation(ev);
+                    const hasScore = ev.score_global !== undefined && ev.score_global !== null;
                     const editLabel = currentUser.role === 'admin_national'
                       ? 'Modifier le brouillon'
                       : 'Reprendre et finaliser le brouillon';
@@ -831,7 +832,7 @@ export default function Dashboard({ currentUser, onEditEvaluation, onNewEvaluati
                           </span>
                         </td>
                         <td className="px-3 py-4">
-                          {ev.score_global ? (
+                          {hasScore ? (
                             <div className="min-w-0">
                               <div className="text-sm font-mono font-bold text-slate-800">{ev.score_global} / 5</div>
                               <div className="text-[9px] text-slate-400 tracking-tight font-bold uppercase truncate">{ev.classification}</div>

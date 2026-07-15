@@ -38,6 +38,20 @@ function isEmpty(value: unknown): boolean {
   return value === undefined || value === null || value === '';
 }
 
+function hasFilledMembreBeProfile(member: Partial<MembreBe> | undefined): boolean {
+  if (!member) return false;
+  return [
+    member.nom_prenoms,
+    member.profession,
+    member.module_formation
+  ].some(value => typeof value === 'string' && value.trim().length > 0)
+    || member.formation_coges === true
+    || member.lit_ecrit_francais !== true
+    || member.lit_ecrit_langue_locale !== false
+    || member.niveau_etude !== 'primaire'
+    || member.maitrise_role !== 'moyenne';
+}
+
 function checkQuestion(code: string, libelle: string, required: boolean, validation: any, value: unknown, errors: string[]) {
   const label = `${code} (${libelle})`;
   if (required && isEmpty(value)) {
@@ -98,8 +112,7 @@ export function validateEvaluationForSubmission(input: ValidationInput): string[
   const instances: any[] = section16?.repeat_instances || [];
   instances.forEach((inst, idx) => {
     const membre = input.membresBe[idx];
-    if (!membre) {
-      errors.push(`Section 16 - ${inst.poste_libelle} : profil manquant.`);
+    if (!hasFilledMembreBeProfile(membre)) {
       return;
     }
     for (const q of section16.questions) {
