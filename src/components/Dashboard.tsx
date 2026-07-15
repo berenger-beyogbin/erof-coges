@@ -400,6 +400,17 @@ export default function Dashboard({ currentUser, onEditEvaluation, onNewEvaluati
     }
   };
 
+  const handleUnlockForRevision = () => {
+    if (!supervisionComment.trim()) {
+      alert('Le motif est obligatoire pour dÃ©verrouiller une Ã©valuation.');
+      return;
+    }
+    if (!window.confirm('DÃ©verrouiller cette Ã©valuation ? Elle repassera en rÃ©vision et redeviendra modifiable.')) {
+      return;
+    }
+    handleStatusChange('en_revision');
+  };
+
   const handleOpenPreuveFile = async (proof: PreuveDocumentaire) => {
     setFileOpenError(null);
     if (!proof.fichier_path) {
@@ -1010,6 +1021,27 @@ export default function Dashboard({ currentUser, onEditEvaluation, onNewEvaluati
                     <Lock className="h-3 w-3 text-amber-500" />
                     <span>Verrouiller l'évaluation (Officielle)</span>
                   </button>
+                )}
+
+                {/* ADMIN ONLY UNLOCKING */}
+                {currentUser.role === 'admin_national' && selectedDetails.evaluation.statut === 'verrouille' && (
+                  <div className="space-y-3 pt-2 border-t border-slate-200">
+                    <p className="text-xs font-bold text-slate-700 uppercase tracking-wider">DÃ©verrouillage administratif</p>
+                    <textarea
+                      placeholder="Motif obligatoire du dÃ©verrouillage..."
+                      className="w-full p-2 bg-white border border-slate-200 rounded text-xs outline-none focus:ring-1 focus:ring-purple-500 h-16"
+                      value={supervisionComment}
+                      onChange={(e) => setSupervisionComment(e.target.value)}
+                    />
+                    <button
+                      type="button"
+                      onClick={handleUnlockForRevision}
+                      className="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-3 rounded text-xs uppercase tracking-wider transition-colors shadow-sm flex items-center justify-center space-x-2"
+                    >
+                      <Unlock className="h-3 w-3 text-purple-100" />
+                      <span>DÃ©verrouiller pour rÃ©vision</span>
+                    </button>
+                  </div>
                 )}
 
                 {/* ERROR/SUCCESS MESSAGES */}

@@ -718,7 +718,7 @@ export class LocalDemoService {
         statut: newStatus,
         validated_by: (newStatus === 'valide' || newStatus === 'rejete') ? userId : evals[evIndex].validated_by,
         validated_at: (newStatus === 'valide' || newStatus === 'rejete') ? now : evals[evIndex].validated_at,
-        locked: newStatus === 'verrouille' ? true : evals[evIndex].locked,
+        locked: newStatus === 'verrouille' ? true : newStatus === 'en_revision' ? false : evals[evIndex].locked,
         updated_at: now
       } as any;
 
@@ -1437,6 +1437,8 @@ export class SupabaseDataService {
     }
     if (newStatus === 'verrouille') {
       updatePayload.locked = true;
+    } else if (newStatus === 'en_revision') {
+      updatePayload.locked = false;
     }
 
     let auditApres: any = { statut: newStatus };
