@@ -35,6 +35,10 @@ function cleanText(value: unknown): string | undefined {
   return typeof value === 'string' && value.trim() ? value.trim() : undefined;
 }
 
+function cleanTimestamp(value: unknown): string | undefined {
+  return typeof value === 'string' && value.trim() ? value.trim() : undefined;
+}
+
 function nullIfBlank<T>(value: T): T | null {
   return value === '' ? null : value;
 }
@@ -60,6 +64,22 @@ function buildLinkedUpdatePayload<T extends { id?: string }>(
   }
   const { id: _ignored, ...rest } = updates as any;
   return { payload: { ...(rest as Partial<T>), id: cleanParentId } };
+}
+
+function buildEquipeEvaluationPayload(
+  member: EquipeEvaluation,
+  evaluationId: string,
+  now: string
+): EquipeEvaluation & { created_at: string; updated_at: string } {
+  const raw = member as EquipeEvaluation & { created_at?: unknown; updated_at?: unknown };
+  return {
+    id: cleanUuid(member.id) || crypto.randomUUID(),
+    evaluation_id: evaluationId,
+    nom_prenoms: typeof member.nom_prenoms === 'string' ? member.nom_prenoms : '',
+    fonction_structure: typeof member.fonction_structure === 'string' ? member.fonction_structure : '',
+    created_at: cleanTimestamp(raw.created_at) || now,
+    updated_at: now
+  };
 }
 
 function normalizePreuveStoragePath(filePath: string): string {
@@ -1292,7 +1312,8 @@ export class SupabaseDataService {
       if (memErr) return { success: false, error: 'Erreur de sauvegarde du BE: ' + memErr.message };
     }
     if (equipes.length > 0) {
-      const { error: eqErr } = await supabase!.from('equipes_evaluation').upsert(equipes);
+      const equipesPayload = equipes.map(member => buildEquipeEvaluationPayload(member, evaluationId, now));
+      const { error: eqErr } = await supabase!.from('equipes_evaluation').upsert(equipesPayload);
       if (eqErr) return { success: false, error: 'Erreur de sauvegarde de l\'équipe: ' + eqErr.message };
     }
     if (recommandations) {

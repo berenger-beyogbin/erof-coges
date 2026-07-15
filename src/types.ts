@@ -181,6 +181,8 @@ export interface EquipeEvaluation {
   evaluation_id: string;
   nom_prenoms: string;
   fonction_structure: string;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface Recommandation {
