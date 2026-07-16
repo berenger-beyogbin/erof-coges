@@ -1,5 +1,5 @@
 import { corsHeaders, jsonResponse } from "../_shared/cors.ts";
-import { requireAdmin } from "../_shared/admin.ts";
+import { requireAdmin, userSafeAdminError } from "../_shared/admin.ts";
 
 const ROLES = new Set([
   "admin_national",
@@ -73,7 +73,7 @@ Deno.serve(async (req) => {
   });
 
   if (error || !data.user) {
-    return jsonResponse({ error: error?.message || "Creation Auth impossible." }, 400);
+    return jsonResponse({ error: userSafeAdminError("la creation du compte utilisateur", error) }, 400);
   }
 
   const userRow = {
@@ -94,7 +94,7 @@ Deno.serve(async (req) => {
 
   if (profileError) {
     return jsonResponse({
-      error: `Compte Auth cree, mais profil public.users impossible: ${profileError.message}`,
+      error: userSafeAdminError("la creation du profil utilisateur", profileError),
     }, 500);
   }
 

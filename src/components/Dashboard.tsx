@@ -4,7 +4,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { DataService } from '../data/dataService';
+import { DataService, formatUserFacingError } from '../data/dataService';
 import { Evaluation, User, EvaluationScore, PreuveDocumentaire, MembreBe, Recommandation, EvaluationStatus, Drena, Iepp } from '../types';
 import questionsErof from '../questions_erof.json';
 import { 
@@ -396,16 +396,16 @@ export default function Dashboard({ currentUser, onEditEvaluation, onNewEvaluati
         setActionError(result.error || 'Une erreur de sécurité ou de validation s\'est produite.');
       }
     } catch (err: any) {
-      setActionError(err?.message || 'Erreur lors de la mise à jour.');
+      setActionError(formatUserFacingError('la mise à jour du statut', err));
     }
   };
 
   const handleUnlockForRevision = () => {
     if (!supervisionComment.trim()) {
-      alert('Le motif est obligatoire pour dÃ©verrouiller une Ã©valuation.');
+      alert('Le motif est obligatoire pour déverrouiller une évaluation.');
       return;
     }
-    if (!window.confirm('DÃ©verrouiller cette Ã©valuation ? Elle repassera en rÃ©vision et redeviendra modifiable.')) {
+    if (!window.confirm('Déverrouiller cette évaluation ? Elle repassera en révision et redeviendra modifiable.')) {
       return;
     }
     handleStatusChange('en_revision');
@@ -414,7 +414,7 @@ export default function Dashboard({ currentUser, onEditEvaluation, onNewEvaluati
   const handleOpenPreuveFile = async (proof: PreuveDocumentaire) => {
     setFileOpenError(null);
     if (!proof.fichier_path) {
-      setFileOpenError('Aucun fichier n\'est associÃ© Ã  cette preuve.');
+      setFileOpenError('Aucun fichier n’est associé à cette preuve.');
       return;
     }
 
@@ -435,7 +435,7 @@ export default function Dashboard({ currentUser, onEditEvaluation, onNewEvaluati
       }
     } catch (err: any) {
       openedWindow?.close();
-      setFileOpenError(err?.message || 'Impossible d\'ouvrir le document.');
+      setFileOpenError(formatUserFacingError('l’ouverture du document', err));
     }
   };
 
@@ -1027,9 +1027,9 @@ export default function Dashboard({ currentUser, onEditEvaluation, onNewEvaluati
                 {/* ADMIN ONLY UNLOCKING */}
                 {currentUser.role === 'admin_national' && selectedDetails.evaluation.statut === 'verrouille' && (
                   <div className="space-y-3 pt-2 border-t border-slate-200">
-                    <p className="text-xs font-bold text-slate-700 uppercase tracking-wider">DÃ©verrouillage administratif</p>
+                    <p className="text-xs font-bold text-slate-700 uppercase tracking-wider">Déverrouillage administratif</p>
                     <textarea
-                      placeholder="Motif obligatoire du dÃ©verrouillage..."
+                      placeholder="Motif obligatoire du déverrouillage..."
                       className="w-full p-2 bg-white border border-slate-200 rounded text-xs outline-none focus:ring-1 focus:ring-purple-500 h-16"
                       value={supervisionComment}
                       onChange={(e) => setSupervisionComment(e.target.value)}
@@ -1040,7 +1040,7 @@ export default function Dashboard({ currentUser, onEditEvaluation, onNewEvaluati
                       className="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-3 rounded text-xs uppercase tracking-wider transition-colors shadow-sm flex items-center justify-center space-x-2"
                     >
                       <Unlock className="h-3 w-3 text-purple-100" />
-                      <span>DÃ©verrouiller pour rÃ©vision</span>
+                      <span>Déverrouiller pour révision</span>
                     </button>
                   </div>
                 )}

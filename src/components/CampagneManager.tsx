@@ -4,7 +4,7 @@
  */
 
 import React, { useEffect, useState } from 'react';
-import { DataService } from '../data/dataService';
+import { DataService, formatUserFacingError } from '../data/dataService';
 import { Campagne, CampagneStatut } from '../types';
 import {
   CalendarRange,
@@ -131,7 +131,7 @@ export default function CampagneManager() {
       await load();
     } catch (err: any) {
       console.error(err);
-      setError("Une erreur inattendue s'est produite.");
+      setError(formatUserFacingError('l’enregistrement de la campagne', err));
     } finally {
       setSaving(false);
     }
@@ -153,7 +153,7 @@ export default function CampagneManager() {
       await load();
     } catch (err) {
       console.error(err);
-      setError('Une erreur inattendue est survenue.');
+      setError(formatUserFacingError('le changement de statut de la campagne', err));
     }
   };
 
@@ -170,7 +170,7 @@ export default function CampagneManager() {
       await load();
     } catch (err) {
       console.error(err);
-      setError('Une erreur inattendue est survenue.');
+      setError(formatUserFacingError('la suppression de la campagne', err));
     }
   };
 

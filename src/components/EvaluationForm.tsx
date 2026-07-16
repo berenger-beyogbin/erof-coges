@@ -5,7 +5,8 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { 
-  DataService
+  DataService,
+  formatUserFacingError
 } from '../data/dataService';
 import {
   User,
@@ -107,7 +108,7 @@ export default function EvaluationForm({ currentUser, evaluationId, onClose }: E
   const safeActiveSectionIdx = Math.min(Math.max(activeSectionIdx, 0), lastSectionIdx);
   const currentSection = sections[safeActiveSectionIdx] || sections[0];
   const isDraftLikeStatus = evaluation.statut === 'brouillon' || evaluation.statut === 'en_revision';
-  const saveButtonLabel = isDraftLikeStatus ? 'Enregistrer brouillon' : 'Enregistrement verrouille';
+  const saveButtonLabel = isDraftLikeStatus ? 'Enregistrer brouillon' : 'Enregistrement verrouillé';
   const isFormBusy = saving || navigationSaving || isClosingDraft || isSubmitting || uploadingProofIdx !== null;
   const requiredCogesName = String((etablissementUpdates as any).nom || (evaluation as any).etablissement?.nom || '').trim();
   const hasRequiredCogesName = requiredCogesName.length > 0 && !/^COGES BROUILLON\b/i.test(requiredCogesName);
@@ -345,9 +346,9 @@ export default function EvaluationForm({ currentUser, evaluationId, onClose }: E
     isAuto = false,
     overrides?: { preuves?: PreuveDocumentaire[] }
   ): Promise<{ success: boolean; error?: string }> => {
-    if (!evalId) return { success: false, error: 'Formulaire non initialise.' };
+    if (!evalId) return { success: false, error: 'Formulaire non initialisé.' };
     if (noActiveCampagne) {
-      const error = 'Aucune campagne active n\'est configuree. Veuillez contacter l\'administrateur.';
+      const error = 'Aucune campagne active n’est configurée. Veuillez contacter l’administrateur.';
       if (isAuto) setAutoSaveStatus('failed');
       else alert(error);
       return { success: false, error };
@@ -470,11 +471,11 @@ export default function EvaluationForm({ currentUser, evaluationId, onClose }: E
         return { success: false, error: result.error || 'Erreur de sauvegarde.' };
       }
     } catch (e: any) {
-      const error = e?.message || 'Erreur inattendue.';
+      const error = formatUserFacingError('la sauvegarde du brouillon', e);
       if (isAuto) setAutoSaveStatus('failed');
       else {
         setSaving(false);
-        alert(`Erreur inattendue : ${error}`);
+        alert(error);
       }
       return { success: false, error };
     }
@@ -514,7 +515,7 @@ export default function EvaluationForm({ currentUser, evaluationId, onClose }: E
         return;
       }
 
-      const error = result.error || 'La sauvegarde du brouillon a echoue.';
+      const error = result.error || 'La sauvegarde du brouillon a échoué.';
       setSubmissionErrors([error]);
       alert(error);
     } finally {
@@ -536,7 +537,7 @@ export default function EvaluationForm({ currentUser, evaluationId, onClose }: E
     // First, force draft save so the submission uses the latest answers.
     const draftResult = await saveDraft(true);
     if (!draftResult.success) {
-      const error = draftResult.error || 'La sauvegarde du brouillon a echoue.';
+      const error = draftResult.error || 'La sauvegarde du brouillon a échoué.';
       setSubmissionErrors([error]);
       alert(error);
       setIsSubmitting(false);
@@ -554,7 +555,7 @@ export default function EvaluationForm({ currentUser, evaluationId, onClose }: E
         alert('La soumission a été bloquée par le système. Veuillez consulter la liste des erreurs et manques au bas de la page.');
       }
     } catch (e: any) {
-      setSubmissionErrors([e.message || 'Erreur inattendue.']);
+      setSubmissionErrors([formatUserFacingError('la soumission de l’évaluation', e)]);
     } finally {
       setIsSubmitting(false);
     }
@@ -574,7 +575,7 @@ export default function EvaluationForm({ currentUser, evaluationId, onClose }: E
       return;
     }
 
-    const error = result.error || 'Le brouillon n\'a pas pu etre enregistre.';
+    const error = result.error || 'Le brouillon n’a pas pu être enregistré.';
     setSubmissionErrors([error]);
     alert(error);
   };
@@ -761,7 +762,7 @@ export default function EvaluationForm({ currentUser, evaluationId, onClose }: E
 
       const proofType = preuvesRef.current[idx]?.type_preuve || preuves[idx]?.type_preuve;
       if (!proofType) {
-        alert('Veuillez selectionner le type de preuve avant d\'envoyer un fichier.');
+        alert('Veuillez sélectionner le type de preuve avant d’envoyer un fichier.');
         return;
       }
       const result = await DataService.uploadPreuveFile(evalId, proofType, file);
@@ -786,10 +787,10 @@ export default function EvaluationForm({ currentUser, evaluationId, onClose }: E
         }
         alert(`Fichier "${file.name}" téléchargé avec succès.`);
       } else {
-        alert(`Échec d'upload : ${result.error}`);
+        alert(`Échec d’envoi du fichier : ${result.error || 'veuillez réessayer.'}`);
       }
     } catch (e: any) {
-      alert(`Erreur d'upload : ${e.message}`);
+      alert(`Échec d’envoi du fichier : ${formatUserFacingError('l’envoi du fichier de preuve', e)}`);
     } finally {
       setUploadingProofIdx(null);
     }
@@ -798,7 +799,7 @@ export default function EvaluationForm({ currentUser, evaluationId, onClose }: E
   const handleOpenUploadedProof = async (proof: PreuveDocumentaire) => {
     setFileOpenError(null);
     if (!proof.fichier_path) {
-      setFileOpenError('Aucun fichier n\'est associÃ© Ã  cette preuve.');
+      setFileOpenError('Aucun fichier n’est associé à cette preuve.');
       return;
     }
 
@@ -819,7 +820,7 @@ export default function EvaluationForm({ currentUser, evaluationId, onClose }: E
       }
     } catch (err: any) {
       openedWindow?.close();
-      setFileOpenError(err?.message || 'Impossible d\'ouvrir le document.');
+      setFileOpenError(formatUserFacingError('l’ouverture du document', err));
     }
   };
 
@@ -908,10 +909,10 @@ export default function EvaluationForm({ currentUser, evaluationId, onClose }: E
           <div className="flex items-center space-x-1.5 mt-3 text-[10px] text-amber-400 font-mono font-medium">
             <Clock className="h-3 w-3 shrink-0" />
             <span>
-              {autoSaveStatus === 'saving' ? 'Auto-sauvegarde...' :
+              {autoSaveStatus === 'saving' ? 'Sauvegarde automatique...' :
                autoSaveStatus === 'saved' ? 'Saisie sauvegardée ✓' :
-               autoSaveStatus === 'failed' ? 'Auto-save échoué ✗' :
-               'Draft auto-save actif'}
+               autoSaveStatus === 'failed' ? 'Sauvegarde automatique échouée ✗' :
+               'Sauvegarde automatique active'}
             </span>
           </div>
         </div>
@@ -1158,7 +1159,7 @@ export default function EvaluationForm({ currentUser, evaluationId, onClose }: E
                           className="p-1.5 bg-indigo-50 hover:bg-indigo-100 disabled:opacity-60 disabled:cursor-wait text-indigo-700 font-bold rounded-lg border border-indigo-200 flex items-center space-x-1"
                         >
                           <Upload className="h-3.5 w-3.5" />
-                          <span className="text-[10px]">{uploadingProofIdx === idx ? 'Envoi...' : 'Upload'}</span>
+                          <span className="text-[10px]">{uploadingProofIdx === idx ? 'Envoi...' : 'Joindre'}</span>
                         </button>
                         {proof.fichier_path && (
                           <button

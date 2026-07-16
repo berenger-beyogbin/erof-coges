@@ -49,6 +49,144 @@ function cleanDraftPayload<T extends Record<string, any>>(payload: T): T {
   ) as T;
 }
 
+type ErrorLike = {
+  message?: string;
+  code?: string;
+  details?: string;
+  hint?: string;
+  status?: number;
+  name?: string;
+};
+
+function readErrorParts(error: unknown): { raw: string; code?: string; status?: number } {
+  if (!error) return { raw: '' };
+  if (typeof error === 'string') return { raw: error };
+  if (error instanceof Error) {
+    const like = error as ErrorLike;
+    return {
+      raw: [like.message, like.details, like.hint].filter(Boolean).join(' '),
+      code: like.code,
+      status: like.status
+    };
+  }
+
+  const like = error as ErrorLike;
+  return {
+    raw: [like.message, like.details, like.hint].filter(Boolean).join(' '),
+    code: like.code,
+    status: like.status
+  };
+}
+
+function extractMissingColumn(raw: string): { column?: string; table?: string } {
+  const schemaCacheMatch = raw.match(/'([^']+)'\s+column\s+of\s+'([^']+)'/i);
+  if (schemaCacheMatch) {
+    return { column: schemaCacheMatch[1], table: schemaCacheMatch[2] };
+  }
+
+  const columnMatch = raw.match(/column\s+"?([a-zA-Z0-9_]+)"?\s+does not exist/i);
+  if (columnMatch) {
+    return { column: columnMatch[1] };
+  }
+
+  return {};
+}
+
+function isProbablySafeFrenchMessage(raw: string): boolean {
+  if (!raw) return false;
+  const technicalTerms = /(schema cache|could not find|row-level security|foreign key|duplicate key|violates|constraint|permission denied|invalid input syntax|postgrest|postgres|relation|column|uuid|bucket|jwt|sql|public\.|auth\.|table)/i;
+  const frenchTerms = /(impossible|veuillez|votre|compte|mot de passe|obligatoire|introuvable|invalide|erreur|echec|échec|autorisee|autorisée|refusée|refusee)/i;
+  return frenchTerms.test(raw) && !technicalTerms.test(raw);
+}
+
+export function formatUserFacingError(action: string, error: unknown): string {
+  const { raw, code, status } = readErrorParts(error);
+  const lower = raw.toLowerCase();
+
+  if (!raw) {
+    return `Impossible de terminer ${action}. Veuillez réessayer. Si le problème persiste, contactez l'administrateur.`;
+  }
+
+  if (isProbablySafeFrenchMessage(raw)) {
+    return raw;
+  }
+
+  if (lower.includes('invalid login credentials')) {
+    return 'Adresse e-mail ou mot de passe incorrect. Vérifiez vos identifiants puis réessayez.';
+  }
+
+  if (lower.includes('email not confirmed')) {
+    return 'Votre adresse e-mail n’est pas encore confirmée. Ouvrez le lien de confirmation reçu par e-mail avant de vous connecter.';
+  }
+
+  if (lower.includes('user already registered') || lower.includes('already registered') || code === 'user_already_exists') {
+    return 'Un compte existe déjà avec cette adresse e-mail. Connectez-vous avec ce compte ou demandez une réinitialisation du mot de passe.';
+  }
+
+  if (lower.includes('password should') || lower.includes('weak password')) {
+    return 'Le mot de passe ne respecte pas les règles de sécurité. Utilisez au moins 8 caractères.';
+  }
+
+  if (lower.includes('unable to validate email') || lower.includes('invalid email')) {
+    return 'L’adresse e-mail saisie n’est pas valide. Vérifiez le format puis réessayez.';
+  }
+
+  if (lower.includes('too many') || lower.includes('rate limit') || status === 429) {
+    return 'Trop de tentatives ont été effectuées en peu de temps. Patientez quelques minutes puis réessayez.';
+  }
+
+  if (lower.includes('schema cache') || lower.includes('could not find') || code === 'PGRST204') {
+    const missing = extractMissingColumn(raw);
+    if (missing.table === 'evaluation_scores' || missing.column?.startsWith('score_axe')) {
+      return 'Impossible de finaliser l’évaluation : la base de données n’est pas à jour pour l’enregistrement des scores par axe. Les réponses restent conservées en brouillon. Contactez l’administrateur pour appliquer la dernière migration Supabase, puis relancez la soumission.';
+    }
+    return `Impossible de terminer ${action} : la base de données n’est pas à jour. Contactez l’administrateur pour appliquer les dernières migrations, puis réessayez.`;
+  }
+
+  if (lower.includes('row-level security') || lower.includes('permission denied') || code === '42501') {
+    return `Impossible de terminer ${action} : votre compte n’a pas l’autorisation de modifier ces données, ou l’évaluation n’est plus modifiable. Revenez au tableau de bord et vérifiez le statut.`;
+  }
+
+  if (lower.includes('duplicate key') || code === '23505') {
+    return `Impossible de terminer ${action} : ces informations existent déjà dans la base. Vérifiez qu’il n’y a pas de doublon.`;
+  }
+
+  if (lower.includes('foreign key') || code === '23503') {
+    return `Impossible de terminer ${action} : une donnée liée est introuvable ou a été supprimée (campagne, COGES, établissement ou utilisateur). Rechargez la page puis réessayez.`;
+  }
+
+  if (lower.includes('not-null') || lower.includes('null value') || code === '23502') {
+    return `Impossible de terminer ${action} : un champ obligatoire n’a pas été renseigné. Vérifiez les champs marqués d’un astérisque puis réessayez.`;
+  }
+
+  if (lower.includes('check constraint') || code === '23514') {
+    return `Impossible de terminer ${action} : une valeur saisie n’est pas acceptée. Vérifiez les choix sélectionnés puis réessayez.`;
+  }
+
+  if (lower.includes('invalid input syntax') || lower.includes('invalid uuid') || code === '22P02') {
+    return `Impossible de terminer ${action} : une référence interne est invalide. Rechargez la page puis réessayez.`;
+  }
+
+  if (lower.includes('failed to fetch') || lower.includes('fetch failed') || lower.includes('network') || lower.includes('load failed')) {
+    return 'Connexion impossible avec le serveur. Vérifiez votre connexion Internet puis réessayez.';
+  }
+
+  if (lower.includes('jwt') || lower.includes('refresh token') || lower.includes('session')) {
+    return 'Votre session a expiré. Déconnectez-vous puis reconnectez-vous avant de réessayer.';
+  }
+
+  if (lower.includes('bucket') || lower.includes('storage')) {
+    return `Impossible de terminer ${action} : l’espace de stockage des preuves n’est pas disponible. Contactez l’administrateur.`;
+  }
+
+  return `Impossible de terminer ${action}. Vérifiez votre connexion, puis réessayez. Si le problème persiste, contactez l’administrateur.`;
+}
+
+function toUserError(action: string, error: unknown): string {
+  console.warn(`[EROF] ${action}`, error);
+  return formatUserFacingError(action, error);
+}
+
 // Builds the upsert payload for a storage_table-scoped side entity (etablissements / coges)
 // linked to an evaluation. Guards against sending an update with a blank/missing parent id
 // (never send "" as a UUID) instead of silently dropping the data.
@@ -833,12 +971,12 @@ export class LocalDemoService {
   static async getPreuveFileUrl(
     filePath: string
   ): Promise<{ success: boolean; url?: string; error?: string }> {
-    if (!filePath) return { success: false, error: 'Aucun fichier associÃ© Ã  cette preuve.' };
+    if (!filePath) return { success: false, error: 'Aucun fichier n’est associé à cette preuve.' };
     if (/^https?:\/\//i.test(filePath)) return { success: true, url: filePath };
 
     return {
       success: false,
-      error: 'La consultation des fichiers locaux de dÃ©monstration n\'est pas disponible.'
+      error: 'La consultation des fichiers locaux de démonstration n’est pas disponible.'
     };
   }
 
@@ -972,7 +1110,7 @@ export class SupabaseDataService {
         }
       }
     });
-    if (error) return { success: false, error: error.message };
+    if (error) return { success: false, error: toUserError('la création du compte', error) };
     if (!data.user) {
       return { success: false, error: 'Inscription refusée : aucun utilisateur renvoyé par le service d\'authentification.' };
     }
@@ -998,7 +1136,7 @@ export class SupabaseDataService {
     if (!profileResult.user) {
       return {
         success: false,
-        error: profileResult.error || 'Compte cree, mais le profil utilisateur est introuvable.'
+        error: profileResult.error || 'Compte créé, mais le profil utilisateur est introuvable.'
       };
     }
 
@@ -1019,14 +1157,14 @@ export class SupabaseDataService {
 
     let { data: profile, error: profileError } = await loadProfile();
     if (profileError) {
-      return { error: `Impossible de charger votre profil utilisateur : ${profileError.message}` };
+      return { error: toUserError('le chargement de votre profil utilisateur', profileError) };
     }
 
     if (!profile && repairMissing) {
       const { error: repairError } = await supabase!.rpc('ensure_own_user_profile');
       if (repairError) {
         return {
-          error: `Compte introuvable : la reparation automatique du profil a echoue (${repairError.message}).`
+          error: toUserError('la réparation automatique de votre profil utilisateur', repairError)
         };
       }
 
@@ -1034,12 +1172,12 @@ export class SupabaseDataService {
       profile = retry.data;
       profileError = retry.error;
       if (profileError) {
-        return { error: `Profil repare, mais lecture impossible : ${profileError.message}` };
+        return { error: toUserError('la lecture de votre profil utilisateur réparé', profileError) };
       }
     }
 
     if (!profile) {
-      return { error: 'Compte introuvable : Votre identifiant n\'a pas de profil configure dans la table "users".' };
+      return { error: 'Compte introuvable : votre identifiant n’a pas de profil utilisateur configuré. Contactez l’administrateur.' };
     }
 
     return { user: profile as User };
@@ -1050,7 +1188,7 @@ export class SupabaseDataService {
       .from('drenas')
       .select('*')
       .order('nom');
-    if (error) throw error;
+    if (error) throw new Error(toUserError('le chargement des DRENA', error));
     return data || [];
   }
 
@@ -1060,7 +1198,7 @@ export class SupabaseDataService {
       query = query.eq('drena_id', drenaId);
     }
     const { data, error } = await query.order('nom');
-    if (error) throw error;
+    if (error) throw new Error(toUserError('le chargement des IEPP', error));
     return data || [];
   }
 
@@ -1070,7 +1208,7 @@ export class SupabaseDataService {
       query = query.eq('iepp_id', ieppId);
     }
     const { data, error } = await query.order('nom');
-    if (error) throw error;
+    if (error) throw new Error(toUserError('le chargement des établissements', error));
     return data || [];
   }
 
@@ -1080,7 +1218,7 @@ export class SupabaseDataService {
       .select('*')
       .eq('etablissement_id', etablissementId)
       .maybeSingle();
-    if (error) throw error;
+    if (error) throw new Error(toUserError('le chargement du COGES', error));
     return data;
   }
 
@@ -1089,7 +1227,7 @@ export class SupabaseDataService {
       .from('campagnes')
       .select('*')
       .order('date_debut', { ascending: false });
-    if (error) throw error;
+    if (error) throw new Error(toUserError('le chargement des campagnes', error));
     return data || [];
   }
 
@@ -1105,7 +1243,7 @@ export class SupabaseDataService {
         .from('campagnes')
         .update({ statut: 'fermee' })
         .eq('statut', 'ouverte');
-      if (closeErr) return { success: false, error: 'Erreur lors de la clôture des campagnes existantes: ' + closeErr.message };
+      if (closeErr) return { success: false, error: toUserError('la clôture des campagnes existantes', closeErr) };
     }
 
     // Generated client-side (rather than relying on .select() to read back
@@ -1127,7 +1265,7 @@ export class SupabaseDataService {
       date_fin: newCampagne.date_fin || null,
       statut: newCampagne.statut
     });
-    if (error) return { success: false, error: 'Erreur lors de la création de la campagne: ' + error.message };
+    if (error) return { success: false, error: toUserError('la création de la campagne', error) };
     return { success: true, campagne: newCampagne };
   }
 
@@ -1141,14 +1279,14 @@ export class SupabaseDataService {
         .update({ statut: 'fermee' })
         .eq('statut', 'ouverte')
         .neq('id', id);
-      if (closeErr) return { success: false, error: 'Erreur lors de la clôture des campagnes existantes: ' + closeErr.message };
+      if (closeErr) return { success: false, error: toUserError('la clôture des campagnes existantes', closeErr) };
     }
 
     const { error } = await supabase!
       .from('campagnes')
       .update(updates)
       .eq('id', id);
-    if (error) return { success: false, error: 'Erreur lors de la mise à jour de la campagne: ' + error.message };
+    if (error) return { success: false, error: toUserError('la mise à jour de la campagne', error) };
     return { success: true };
   }
 
@@ -1157,7 +1295,7 @@ export class SupabaseDataService {
       .from('campagnes')
       .delete()
       .eq('id', id);
-    if (error) return { success: false, error: 'Suppression impossible (des évaluations sont probablement rattachées à cette campagne): ' + error.message };
+    if (error) return { success: false, error: toUserError('la suppression de la campagne', error) };
     return { success: true };
   }
 
@@ -1184,7 +1322,7 @@ export class SupabaseDataService {
         )
       `);
     
-    if (error) throw error;
+    if (error) throw new Error(toUserError('le chargement des évaluations', error));
 
     return await Promise.all((data || []).map(async (d: any) => {
       const etab = d.etablissements;
@@ -1229,7 +1367,7 @@ export class SupabaseDataService {
       .eq('id', id)
       .maybeSingle();
 
-    if (evError) throw evError;
+    if (evError) throw new Error(toUserError('le chargement de l’évaluation', evError));
     if (!ev) return null;
 
     // Get cascading details of IEPP/DRENA
@@ -1253,12 +1391,12 @@ export class SupabaseDataService {
       supabase!.from('evaluation_scores').select('*').eq('evaluation_id', id).maybeSingle()
     ]);
 
-    if (reps.error) throw reps.error;
-    if (members.error) throw members.error;
-    if (teams.error) throw teams.error;
-    if (recs.error) throw recs.error;
-    if (proofs.error) throw proofs.error;
-    if (sc.error) throw sc.error;
+    if (reps.error) throw new Error(toUserError('le chargement des réponses', reps.error));
+    if (members.error) throw new Error(toUserError('le chargement des membres du BE', members.error));
+    if (teams.error) throw new Error(toUserError('le chargement de l’équipe d’évaluation', teams.error));
+    if (recs.error) throw new Error(toUserError('le chargement des recommandations', recs.error));
+    if (proofs.error) throw new Error(toUserError('le chargement des preuves', proofs.error));
+    if (sc.error) throw new Error(toUserError('le chargement du score', sc.error));
 
     return {
       evaluation: {
@@ -1347,10 +1485,10 @@ export class SupabaseDataService {
     });
 
     const { error: etabErr } = await supabase!.from('etablissements').upsert(etablissementPayload);
-    if (etabErr) return { success: false, error: "Erreur de sauvegarde de l'établissement: " + etabErr.message };
+    if (etabErr) return { success: false, error: toUserError("l'enregistrement de l'établissement", etabErr) };
 
     const { error: cogesErr } = await supabase!.from('coges').upsert(cogesPayload);
-    if (cogesErr) return { success: false, error: 'Erreur de sauvegarde du COGES: ' + cogesErr.message };
+    if (cogesErr) return { success: false, error: toUserError("l'enregistrement du COGES", cogesErr) };
 
     // Save core evaluation. Deliberately INSERT for a brand-new evaluation
     // rather than upsert(): upsert compiles to INSERT ... ON CONFLICT DO
@@ -1384,7 +1522,7 @@ export class SupabaseDataService {
     const { error: evErr } = existingDetails
       ? await supabase!.from('evaluations').update(evaluationRow).eq('id', evaluationId)
       : await supabase!.from('evaluations').insert(evaluationRow);
-    if (evErr) return { success: false, error: 'Erreur de sauvegarde d\'évaluation: ' + evErr.message };
+    if (evErr) return { success: false, error: toUserError("l'enregistrement de l'évaluation", evErr) };
 
     // Batch upserts of related entities
     if (reponses.length > 0) {
@@ -1395,16 +1533,16 @@ export class SupabaseDataService {
       const { error: repErr } = await supabase!
         .from('evaluation_reponses')
         .upsert(reponsesPayload, { onConflict: 'evaluation_id,question_code' });
-      if (repErr) return { success: false, error: 'Erreur de sauvegarde des réponses: ' + repErr.message };
+      if (repErr) return { success: false, error: toUserError("l'enregistrement des réponses", repErr) };
     }
     if (membresBe.length > 0) {
       const { error: memErr } = await supabase!.from('membres_be').upsert(membresBe);
-      if (memErr) return { success: false, error: 'Erreur de sauvegarde du BE: ' + memErr.message };
+      if (memErr) return { success: false, error: toUserError("l'enregistrement des membres du BE", memErr) };
     }
     if (equipes.length > 0) {
       const equipesPayload = equipes.map(member => buildEquipeEvaluationPayload(member, evaluationId, now));
       const { error: eqErr } = await supabase!.from('equipes_evaluation').upsert(equipesPayload);
-      if (eqErr) return { success: false, error: 'Erreur de sauvegarde de l\'équipe: ' + eqErr.message };
+      if (eqErr) return { success: false, error: toUserError("l'enregistrement de l'équipe d'évaluation", eqErr) };
     }
     if (recommandations) {
       const { error: recErr } = await supabase!.from('recommandations').upsert({
@@ -1417,11 +1555,11 @@ export class SupabaseDataService {
         appuis_attendus: recommandations.appuis_attendus || '',
         recommandations_prioritaires: recommandations.recommandations_prioritaires || ''
       });
-      if (recErr) return { success: false, error: 'Erreur de sauvegarde des recommandations: ' + recErr.message };
+      if (recErr) return { success: false, error: toUserError("l'enregistrement des recommandations", recErr) };
     }
     if (preuves.length > 0) {
       const { error: prfErr } = await supabase!.from('preuves_documentaires').upsert(preuves);
-      if (prfErr) return { success: false, error: 'Erreur de sauvegarde des preuves: ' + prfErr.message };
+      if (prfErr) return { success: false, error: toUserError("l'enregistrement des preuves", prfErr) };
     }
 
     try {
@@ -1442,7 +1580,7 @@ export class SupabaseDataService {
       .maybeSingle();
 
     if (selectErr) {
-      return { success: false, error: 'Erreur de lecture du score existant: ' + selectErr.message };
+      return { success: false, error: toUserError('la lecture du score existant', selectErr) };
     }
 
     const payload = buildEvaluationScorePayload(score, existingScore as EvaluationScore | null, now);
@@ -1451,7 +1589,7 @@ export class SupabaseDataService {
       .upsert(payload, { onConflict: 'evaluation_id' });
 
     if (error) {
-      return { success: false, error: 'Erreur de sauvegarde du score: ' + error.message };
+      return { success: false, error: toUserError("l'enregistrement du score de l'évaluation", error) };
     }
 
     return { success: true };
@@ -1521,7 +1659,7 @@ export class SupabaseDataService {
       })
       .eq('id', id);
 
-    if (evErr) return { success: false, errors: ['Erreur lors de la soumission : ' + evErr.message] };
+    if (evErr) return { success: false, errors: [toUserError("la soumission de l'évaluation", evErr)] };
 
     // Query official scores from Supabase first (in case a database trigger calculated them on status update)
     const { data: officialScore } = await supabase!
@@ -1625,7 +1763,7 @@ export class SupabaseDataService {
       .update(updatePayload)
       .eq('id', id);
 
-    if (evErr) return { success: false, error: 'Erreur lors du changement de statut: ' + evErr.message };
+    if (evErr) return { success: false, error: toUserError("le changement de statut de l'évaluation", evErr) };
 
     try {
       await this.addAuditLog(userId, `Changement statut vers ${newStatus}`, 'evaluations', id, null, auditApres);
@@ -1650,7 +1788,7 @@ export class SupabaseDataService {
       });
 
     if (error) {
-      return { success: false, error: 'Échec d\'upload vers le bucket preuves-erof : ' + error.message };
+      return { success: false, error: toUserError("l'envoi du fichier de preuve", error) };
     }
     return { success: true, filePath: data.path };
   }
@@ -1658,7 +1796,7 @@ export class SupabaseDataService {
   static async getPreuveFileUrl(
     filePath: string
   ): Promise<{ success: boolean; url?: string; error?: string }> {
-    if (!filePath) return { success: false, error: 'Aucun fichier associÃ© Ã  cette preuve.' };
+    if (!filePath) return { success: false, error: 'Aucun fichier n’est associé à cette preuve.' };
     if (/^https?:\/\//i.test(filePath)) return { success: true, url: filePath };
 
     const normalizedPath = normalizePreuveStoragePath(filePath);
@@ -1669,7 +1807,9 @@ export class SupabaseDataService {
     if (error || !data?.signedUrl) {
       return {
         success: false,
-        error: 'Impossible de gÃ©nÃ©rer le lien de consultation du document : ' + (error?.message || 'URL absente')
+        error: error
+          ? toUserError('la génération du lien de consultation du document', error)
+          : 'Impossible de générer le lien de consultation du document : le serveur n’a pas renvoyé d’URL.'
       };
     }
 
@@ -1693,7 +1833,7 @@ export class SupabaseDataService {
       donnees_apres: donneesApres
     });
     if (error) {
-      console.warn('Could not insert audit_log into Supabase: ', error.message);
+      console.warn('[EROF] Journal d’audit non enregistré', error);
     }
   }
 
@@ -1702,7 +1842,7 @@ export class SupabaseDataService {
       .from('audit_logs')
       .select('*')
       .order('created_at', { ascending: false });
-    if (error) throw error;
+    if (error) throw new Error(toUserError('le chargement du journal d’audit', error));
     return data || [];
   }
 
@@ -1711,7 +1851,7 @@ export class SupabaseDataService {
       .from('users')
       .select('*')
       .order('nom');
-    if (error) throw error;
+    if (error) throw new Error(toUserError('le chargement des utilisateurs', error));
     return data || [];
   }
 
@@ -1736,17 +1876,17 @@ export class SupabaseDataService {
     if (error) {
       // Supabase functions client surfaces non-2xx responses as a generic error;
       // try to recover the specific message the function returned in its JSON body.
-      let message = error.message || "Échec de la création du compte.";
+      let message = toUserError('la création du compte utilisateur', error);
       try {
         const ctx = (error as any).context;
         if (ctx && typeof ctx.json === 'function') {
           const parsed = await ctx.json();
-          if (parsed?.error) message = parsed.error;
+          if (parsed?.error) message = formatUserFacingError('la création du compte utilisateur', parsed.error);
         }
       } catch (_) {}
       return { success: false, error: message };
     }
-    if (data?.error) return { success: false, error: data.error };
+    if (data?.error) return { success: false, error: formatUserFacingError('la création du compte utilisateur', data.error) };
     return { success: true, user: data.user as User };
   }
 
@@ -1764,7 +1904,7 @@ export class SupabaseDataService {
       .from('users')
       .update(sanitizedUpdates)
       .eq('id', id);
-    if (error) return { success: false, error: 'Erreur lors de la mise à jour du profil : ' + error.message };
+    if (error) return { success: false, error: toUserError('la mise à jour du profil utilisateur', error) };
     return { success: true };
   }
 
@@ -1773,7 +1913,7 @@ export class SupabaseDataService {
       .from('users')
       .delete()
       .eq('id', id);
-    if (error) return { success: false, error: 'Suppression impossible (des données sont probablement rattachées à cet utilisateur, désactivez-le plutôt) : ' + error.message };
+    if (error) return { success: false, error: toUserError('la suppression du compte utilisateur', error) };
     return { success: true };
   }
 
@@ -1783,17 +1923,17 @@ export class SupabaseDataService {
     });
 
     if (error) {
-      let message = error.message || 'Échec de la réinitialisation du mot de passe.';
+      let message = toUserError('la réinitialisation du mot de passe', error);
       try {
         const ctx = (error as any).context;
         if (ctx && typeof ctx.json === 'function') {
           const parsed = await ctx.json();
-          if (parsed?.error) message = parsed.error;
+          if (parsed?.error) message = formatUserFacingError('la réinitialisation du mot de passe', parsed.error);
         }
       } catch (_) {}
       return { success: false, error: message };
     }
-    if (data?.error) return { success: false, error: data.error };
+    if (data?.error) return { success: false, error: formatUserFacingError('la réinitialisation du mot de passe', data.error) };
     return { success: true };
   }
 }

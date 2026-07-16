@@ -5,7 +5,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { supabase, isSupabaseConfigured } from '../supabaseClient';
-import { PRE_SEEDED_USERS, DataService, SupabaseDataService } from '../data/dataService';
+import { PRE_SEEDED_USERS, DataService, SupabaseDataService, formatUserFacingError } from '../data/dataService';
 import { User, Drena } from '../types';
 import { Shield, Lock, Mail, Server, Database, HelpCircle, Eye, EyeOff, UserPlus, MapPin, ArrowLeft, User as UserIcon } from 'lucide-react';
 
@@ -73,7 +73,7 @@ export default function Login({ onLoginSuccess }: LoginProps) {
 
       onLoginSuccess(result.user);
     } catch (err: any) {
-      setRegErrorMsg(err?.message || 'Une erreur inattendue est survenue.');
+      setRegErrorMsg(formatUserFacingError('la création du compte', err));
     } finally {
       setRegLoading(false);
     }
@@ -94,7 +94,7 @@ export default function Login({ onLoginSuccess }: LoginProps) {
         });
 
         if (error) {
-          setErrorMsg(error.message || 'Identifiants de connexion invalides.');
+          setErrorMsg(formatUserFacingError('la connexion', error));
           setLoading(false);
           return;
         }
@@ -140,7 +140,7 @@ export default function Login({ onLoginSuccess }: LoginProps) {
         });
       }
     } catch (err: any) {
-      setErrorMsg(err?.message || 'Une erreur inattendue est survenue.');
+      setErrorMsg(formatUserFacingError('la connexion', err));
     } finally {
       setLoading(false);
     }

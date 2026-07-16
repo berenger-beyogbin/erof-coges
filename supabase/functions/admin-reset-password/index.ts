@@ -1,5 +1,5 @@
 import { corsHeaders, jsonResponse } from "../_shared/cors.ts";
-import { requireAdmin } from "../_shared/admin.ts";
+import { requireAdmin, userSafeAdminError } from "../_shared/admin.ts";
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -36,7 +36,7 @@ Deno.serve(async (req) => {
   });
 
   if (error) {
-    return jsonResponse({ error: error.message }, 400);
+    return jsonResponse({ error: userSafeAdminError("la reinitialisation du mot de passe", error) }, 400);
   }
 
   return jsonResponse({ success: true });
