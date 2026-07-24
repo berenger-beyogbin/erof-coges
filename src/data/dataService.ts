@@ -1544,8 +1544,6 @@ export class SupabaseDataService {
     }
 
     const evaluationId = cleanUuid(evaluation.id);
-    const etablissementId = cleanUuid(evaluation.etablissement_id);
-    const cogesId = cleanUuid(evaluation.coges_id);
     const campagneId = cleanUuid(evaluation.campagne_id);
     const enqueteurId = cleanUuid(evaluation.enqueteur_id);
     const createdBy = cleanUuid(evaluation.created_by) || userId;
@@ -1553,13 +1551,61 @@ export class SupabaseDataService {
     if (!evaluationId) return { success: false, error: "Impossible d'enregistrer : identifiant d'évaluation absent." };
     if (!campagneId) return { success: false, error: "Impossible d'enregistrer : aucune campagne active n'est associée à l'évaluation." };
     if (!enqueteurId) return { success: false, error: "Impossible d'enregistrer : aucun enquêteur n'est associé à l'évaluation." };
-    if (!etablissementId || !cogesId) return { success: false, error: "Impossible d'enregistrer : identifiants COGES incomplets." };
 
     const etablissementDraft = cleanDraftPayload({ ...(etablissementUpdates || {}) } as Record<string, any>) as Partial<Etablissement>;
     const cogesDraft = cleanDraftPayload({ ...(cogesUpdates || {}) } as Record<string, any>) as Partial<Coges>;
-    const existingEtablissement = existingDetails?.evaluation.etablissement;
-    const existingCoges = existingDetails?.evaluation.coges;
-    const ieppId = cleanUuid(etablissementDraft.iepp_id) || cleanUuid(existingEtablissement?.iepp_id);
+    let existingEtablissement = existingDetails?.evaluation.etablissement;
+    let existingCoges = existingDetails?.evaluation.coges;
+
+    // Section 1 identifies an establishment from the shared DESPS referential.
+    // A new form initially owns temporary UUIDs, so inserting them unchanged would
+    // violate the unique DESPS-code constraint as soon as the user clicks "Suivant".
+    // Resolve the canonical row first and reuse its COGES when it already exists.
+    const submittedCodeDesps = cleanText(etablissementDraft.code_desps);
+    if (!existingEtablissement && submittedCodeDesps) {
+      const { data: matchingEtablissement, error: matchingEtablissementError } = await supabase!
+        .from('etablissements')
+        .select('*')
+        .eq('code_desps', submittedCodeDesps)
+        .maybeSingle();
+      if (matchingEtablissementError) {
+        return {
+          success: false,
+          error: toUserError("la recherche de l'établissement dans le référentiel DESPS", matchingEtablissementError)
+        };
+      }
+      existingEtablissement = matchingEtablissement || undefined;
+
+      if (existingEtablissement) {
+        const { data: matchingCoges, error: matchingCogesError } = await supabase!
+          .from('coges')
+          .select('*')
+          .eq('etablissement_id', existingEtablissement.id)
+          .maybeSingle();
+        if (matchingCogesError) {
+          return {
+            success: false,
+            error: toUserError("la recherche du COGES de l'établissement", matchingCogesError)
+          };
+        }
+        existingCoges = matchingCoges || undefined;
+      }
+    }
+
+    // Once an evaluation exists, its persisted relationships are authoritative.
+    // This also protects subsequent autosaves from stale temporary IDs in the UI.
+    const etablissementId =
+      cleanUuid(existingDetails?.evaluation.etablissement_id) ||
+      cleanUuid(existingEtablissement?.id) ||
+      cleanUuid(evaluation.etablissement_id);
+    const cogesId =
+      cleanUuid(existingDetails?.evaluation.coges_id) ||
+      cleanUuid(existingCoges?.id) ||
+      cleanUuid(evaluation.coges_id);
+
+    if (!etablissementId || !cogesId) return { success: false, error: "Impossible d'enregistrer : identifiants COGES incomplets." };
+
+    const ieppId = cleanUuid(existingEtablissement?.iepp_id) || cleanUuid(etablissementDraft.iepp_id);
 
     if (!ieppId) {
       return { success: false, error: "Impossible d'enregistrer le brouillon : sélectionnez d'abord l'IEPP de rattachement." };
