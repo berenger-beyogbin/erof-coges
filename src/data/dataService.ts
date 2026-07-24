@@ -722,6 +722,39 @@ export class LocalDemoService {
     };
   }
 
+  static async deleteEvaluation(
+    id: string,
+    currentUser: User
+  ): Promise<{ success: boolean; error?: string }> {
+    if (currentUser.role !== 'admin_national') {
+      return { success: false, error: 'Action réservée à un administrateur national.' };
+    }
+
+    const evaluations = getStoredItem<Evaluation[]>('evaluations', []);
+    const evaluation = evaluations.find(item => item.id === id);
+    if (!evaluation) {
+      return { success: false, error: 'Évaluation introuvable.' };
+    }
+
+    setStoredItem<Evaluation[]>('evaluations', evaluations.filter(item => item.id !== id));
+    setStoredItem<EvaluationReponse[]>('reponses', getStoredItem<EvaluationReponse[]>('reponses', []).filter(item => item.evaluation_id !== id));
+    setStoredItem<MembreBe[]>('membres_be', getStoredItem<MembreBe[]>('membres_be', []).filter(item => item.evaluation_id !== id));
+    setStoredItem<EquipeEvaluation[]>('equipes', getStoredItem<EquipeEvaluation[]>('equipes', []).filter(item => item.evaluation_id !== id));
+    setStoredItem<Recommandation[]>('recommandations', getStoredItem<Recommandation[]>('recommandations', []).filter(item => item.evaluation_id !== id));
+    setStoredItem<PreuveDocumentaire[]>('preuves', getStoredItem<PreuveDocumentaire[]>('preuves', []).filter(item => item.evaluation_id !== id));
+    setStoredItem<EvaluationScore[]>('scores', getStoredItem<EvaluationScore[]>('scores', []).filter(item => item.evaluation_id !== id));
+
+    this.addAuditLog(
+      currentUser.id,
+      'Suppression administrative de l’évaluation',
+      'evaluations',
+      id,
+      evaluation,
+      { supprimee: true }
+    );
+    return { success: true };
+  }
+
   static async saveDraft(
     evaluation: Partial<Evaluation> & { id: string },
     reponses: EvaluationReponse[],
@@ -1415,6 +1448,80 @@ export class SupabaseDataService {
     };
   }
 
+  static async deleteEvaluation(
+    id: string,
+    currentUser: User
+  ): Promise<{ success: boolean; error?: string }> {
+    if (currentUser.role !== 'admin_national') {
+      return { success: false, error: 'Action réservée à un administrateur national.' };
+    }
+
+    const { data: evaluation, error: evaluationError } = await supabase!
+      .from('evaluations')
+      .select('*')
+      .eq('id', id)
+      .maybeSingle();
+    if (evaluationError) {
+      return { success: false, error: toUserError('la vérification de l’évaluation', evaluationError) };
+    }
+    if (!evaluation) {
+      return { success: false, error: 'Évaluation introuvable.' };
+    }
+
+    const { data: proofs, error: proofsError } = await supabase!
+      .from('preuves_documentaires')
+      .select('fichier_path')
+      .eq('evaluation_id', id);
+    if (proofsError) {
+      return { success: false, error: toUserError('la vérification des pièces justificatives', proofsError) };
+    }
+
+    const proofPaths = Array.from(new Set(
+      (proofs || [])
+        .map(proof => proof.fichier_path)
+        .filter((path): path is string => typeof path === 'string' && path.trim() !== '' && !/^https?:\/\//i.test(path))
+        .map(normalizePreuveStoragePath)
+    ));
+    if (proofPaths.length > 0) {
+      const { error: storageError } = await supabase!.storage
+        .from(PREUVES_BUCKET)
+        .remove(proofPaths);
+      if (storageError) {
+        return { success: false, error: toUserError('la suppression des pièces justificatives', storageError) };
+      }
+    }
+
+    const { error: deleteError } = await supabase!
+      .from('evaluations')
+      .delete()
+      .eq('id', id);
+    if (deleteError) {
+      return { success: false, error: toUserError('la suppression de l’évaluation', deleteError) };
+    }
+
+    const { data: remaining, error: verificationError } = await supabase!
+      .from('evaluations')
+      .select('id')
+      .eq('id', id)
+      .maybeSingle();
+    if (verificationError) {
+      return { success: false, error: toUserError('la vérification de la suppression', verificationError) };
+    }
+    if (remaining) {
+      return { success: false, error: 'La suppression a été refusée par les règles de sécurité.' };
+    }
+
+    await this.addAuditLog(
+      currentUser.id,
+      'Suppression administrative de l’évaluation',
+      'evaluations',
+      id,
+      evaluation,
+      { supprimee: true }
+    );
+    return { success: true };
+  }
+
   static async saveDraft(
     evaluation: Partial<Evaluation> & { id: string },
     reponses: EvaluationReponse[],
@@ -2065,6 +2172,16 @@ export class DataService {
       return await SupabaseDataService.getEvaluationDetails(id);
     }
     return await LocalDemoService.getEvaluationDetails(id);
+  }
+
+  static async deleteEvaluation(
+    id: string,
+    currentUser: User
+  ): Promise<{ success: boolean; error?: string }> {
+    if (isSupabaseConfigured) {
+      return await SupabaseDataService.deleteEvaluation(id, currentUser);
+    }
+    return await LocalDemoService.deleteEvaluation(id, currentUser);
   }
 
   static async saveDraft(

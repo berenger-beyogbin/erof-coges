@@ -26,7 +26,8 @@ import {
   Eye, 
   AlertTriangle,
   Award,
-  ExternalLink
+  ExternalLink,
+  Trash2
 } from 'lucide-react';
 
 interface DashboardProps {
@@ -286,6 +287,8 @@ export default function Dashboard({ currentUser, onEditEvaluation, onNewEvaluati
   const [actionError, setActionError] = useState<string | null>(null);
   const [showFilledForm, setShowFilledForm] = useState(false);
   const [fileOpenError, setFileOpenError] = useState<string | null>(null);
+  const [deletingEvalId, setDeletingEvalId] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   // Load evaluations
   const loadEvaluations = async () => {
@@ -409,6 +412,37 @@ export default function Dashboard({ currentUser, onEditEvaluation, onNewEvaluati
       return;
     }
     handleStatusChange('en_revision');
+  };
+
+  const handleDeleteEvaluation = async (evaluation: any) => {
+    if (currentUser.role !== 'admin_national' || deletingEvalId) return;
+
+    const schoolName = evaluation.etablissement_nom || 'ce COGES évalué';
+    const confirmed = window.confirm(
+      `Supprimer définitivement l’évaluation de « ${schoolName} » ?\n\n` +
+      'Le formulaire, le score, les réponses et les pièces justificatives associés seront supprimés. Cette action est irréversible.'
+    );
+    if (!confirmed) return;
+
+    setDeletingEvalId(evaluation.id);
+    setDeleteError(null);
+    try {
+      const result = await DataService.deleteEvaluation(evaluation.id, currentUser);
+      if (!result.success) {
+        setDeleteError(result.error || 'La suppression de l’évaluation a échoué.');
+        return;
+      }
+
+      if (selectedEvalId === evaluation.id) {
+        setSelectedEvalId(null);
+        setSelectedDetails(null);
+      }
+      await loadEvaluations();
+    } catch (err) {
+      setDeleteError(formatUserFacingError('la suppression de l’évaluation', err));
+    } finally {
+      setDeletingEvalId(null);
+    }
   };
 
   const handleOpenPreuveFile = async (proof: PreuveDocumentaire) => {
@@ -749,6 +783,13 @@ export default function Dashboard({ currentUser, onEditEvaluation, onNewEvaluati
             </div>
           )}
 
+          {deleteError && (
+            <div className="px-4 py-2 bg-rose-50 border-b border-rose-200 text-[11px] text-rose-800 font-medium flex items-center gap-1.5">
+              <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-rose-600" />
+              <span>{deleteError}</span>
+            </div>
+          )}
+
           {canCreateEvaluation && draftCount > 0 && (
             <div className="px-4 py-2 bg-amber-50 border-b border-amber-200 text-[11px] text-amber-900 font-semibold flex items-center gap-1.5">
               <Clock className="h-3.5 w-3.5 shrink-0 text-amber-600" />
@@ -860,6 +901,24 @@ export default function Dashboard({ currentUser, onEditEvaluation, onNewEvaluati
                               >
                                 <Edit className="h-4 w-4" />
                                 <span className="sr-only">{editLabel}</span>
+                              </button>
+                            )}
+
+                            {currentUser.role === 'admin_national' && (
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteEvaluation(ev)}
+                                disabled={deletingEvalId !== null}
+                                className="shrink-0 p-1.5 text-rose-600 hover:text-rose-800 hover:bg-rose-50 rounded transition-colors border border-rose-200 bg-white shadow-sm disabled:opacity-40 disabled:cursor-not-allowed"
+                                title="Supprimer définitivement cette évaluation"
+                                aria-label={`Supprimer l’évaluation de ${ev.etablissement_nom || 'ce COGES'}`}
+                              >
+                                {deletingEvalId === ev.id ? (
+                                  <RefreshCw className="h-4 w-4 animate-spin" />
+                                ) : (
+                                  <Trash2 className="h-4 w-4" />
+                                )}
+                                <span className="sr-only">Supprimer l’évaluation</span>
                               </button>
                             )}
                           </div>
