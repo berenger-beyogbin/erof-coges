@@ -19,8 +19,10 @@ import {
 } from 'lucide-react';
 import { DataService, formatUserFacingError } from '../data/dataService';
 import { Drena, Evaluation, EvaluationScore, User } from '../types';
+import questionsErof from '../questions_erof.json';
 
 const TARGET_PER_DRENA = 15;
+const FORM_SECTIONS = questionsErof.sections as FormSection[];
 
 type DashboardEvaluation = Partial<Evaluation> & Pick<Evaluation, 'id' | 'statut'> & {
   drena_nom?: string;
@@ -52,6 +54,25 @@ type DrenaStatistic = {
   validationRate: number;
   averageScore: number | null;
 };
+
+type FormQuestion = {
+  code: string;
+  libelle: string;
+  storage_table?: string;
+  storage_column?: string;
+  type?: string;
+  options?: { value: string | number | boolean; label: string }[];
+  boolean_mapping?: Record<string, boolean>;
+};
+
+type FormSection = {
+  num: number;
+  titre: string;
+  questions?: FormQuestion[];
+};
+
+type EvaluationDetails = NonNullable<Awaited<ReturnType<typeof DataService.getEvaluationDetails>>>;
+type ExcelValue = string | number | boolean;
 
 const CLASSIFICATION_STYLES: Record<string, { bar: string; badge: string }> = {
   'Performant / avancé': {
@@ -111,11 +132,67 @@ function numericValue(value: unknown): number | '' {
   return Number.isFinite(number) ? number : '';
 }
 
+function excelValue(value: unknown): ExcelValue {
+  if (value === undefined || value === null) return '';
+  if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') return value;
+  return JSON.stringify(value);
+}
+
+function objectField(source: unknown, column: string | undefined): unknown {
+  if (!source || typeof source !== 'object' || !column) return undefined;
+  const record = source as Record<string, unknown>;
+  if (!column.includes(',')) return record[column];
+
+  const values = column.split(',').map(part => record[part.trim()]);
+  return values.some(value => value === undefined || value === null)
+    ? undefined
+    : values.join(', ');
+}
+
+function rawQuestionValue(details: EvaluationDetails, question: FormQuestion): ExcelValue {
+  const evaluation = details.evaluation;
+  const table = question.storage_table || 'evaluation_reponses';
+
+  if (table === 'reference') {
+    if (question.code === '1.1') return evaluation.drena?.nom || '';
+    if (question.code === '1.2') return evaluation.iepp?.nom || evaluation.etablissement?.iepp_id || '';
+    return '';
+  }
+  if (table === 'etablissements') return excelValue(objectField(evaluation.etablissement, question.storage_column));
+  if (table === 'coges') return excelValue(objectField(evaluation.coges, question.storage_column));
+  if (table === 'evaluations') return excelValue(objectField(evaluation, question.storage_column));
+  if (table === 'recommandations') return excelValue(objectField(details.recommandations, question.storage_column));
+  if (table === 'preuves_documentaires') {
+    return details.preuves.find(proof => proof.type_preuve === question.libelle)?.statut || '';
+  }
+
+  const answer = details.reponses.find(response => response.question_code === question.code);
+  return excelValue(
+    answer?.valeur_numerique
+    ?? answer?.valeur_texte
+    ?? answer?.valeur_date
+    ?? answer?.valeur_json
+  );
+}
+
+function answerLabel(question: FormQuestion, value: ExcelValue): string {
+  if (value === '') return '';
+
+  let normalizedValue = String(value);
+  if (question.boolean_mapping && typeof value === 'boolean') {
+    const mapping = Object.entries(question.boolean_mapping).find(([, mapped]) => mapped === value);
+    normalizedValue = mapping?.[0] || normalizedValue;
+  }
+  return question.options?.find(option => String(option.value) === normalizedValue)?.label || String(value);
+}
+
 export default function AdminStatistics({ currentUser }: { currentUser: User }) {
   const [evaluations, setEvaluations] = useState<DashboardEvaluation[]>([]);
   const [drenas, setDrenas] = useState<Drena[]>([]);
   const [loading, setLoading] = useState(true);
   const [exporting, setExporting] = useState(false);
+  const [rawExporting, setRawExporting] = useState(false);
+  const [rawExportProgress, setRawExportProgress] = useState({ loaded: 0, total: 0 });
   const [error, setError] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
@@ -381,6 +458,211 @@ export default function AdminStatistics({ currentUser }: { currentUser: User }) 
     }
   };
 
+  const exportRawDatabase = async () => {
+    setRawExporting(true);
+    setRawExportProgress({ loaded: 0, total: evaluations.length });
+    setError(null);
+
+    try {
+      const detailsList: EvaluationDetails[] = [];
+      const batchSize = 10;
+
+      for (let index = 0; index < evaluations.length; index += batchSize) {
+        const batch = evaluations.slice(index, index + batchSize);
+        const batchDetails = await Promise.all(
+          batch.map(evaluation => DataService.getEvaluationDetails(evaluation.id))
+        );
+        if (batchDetails.some(details => details === null)) {
+          throw new Error('Une ou plusieurs évaluations sont introuvables.');
+        }
+        detailsList.push(...batchDetails.filter((details): details is EvaluationDetails => details !== null));
+        setRawExportProgress({
+          loaded: Math.min(index + batch.length, evaluations.length),
+          total: evaluations.length
+        });
+      }
+
+      const XLSX = await import('@e965/xlsx');
+      const workbook = XLSX.utils.book_new();
+      const generatedAt = new Date();
+      const fixedQuestions = FORM_SECTIONS
+        .filter(section => section.num !== 16 && section.num !== 20)
+        .flatMap(section => (section.questions || []).map(question => ({ section, question })));
+
+      const addSheet = (
+        name: string,
+        rows: Record<string, ExcelValue>[],
+        widths: number[]
+      ) => {
+        const sheet = XLSX.utils.json_to_sheet(rows);
+        sheet['!cols'] = widths.map(width => ({ wch: width }));
+        if (sheet['!ref'] && rows.length > 0) {
+          const range = XLSX.utils.decode_range(sheet['!ref']);
+          sheet['!autofilter'] = {
+            ref: XLSX.utils.encode_range({
+              s: { r: range.s.r, c: range.s.c },
+              e: { r: range.s.r, c: range.e.c }
+            })
+          };
+        }
+        XLSX.utils.book_append_sheet(workbook, sheet, name);
+      };
+
+      const baseRows = detailsList.map(details => {
+        const evaluation = details.evaluation;
+        const summary = evaluations.find(item => item.id === evaluation.id);
+        const row: Record<string, ExcelValue> = {
+          'ID évaluation': evaluation.id,
+          DRENA: evaluation.drena?.nom || summary?.drena_nom || '',
+          IEPP: evaluation.iepp?.nom || summary?.iepp_nom || '',
+          Établissement: evaluation.etablissement?.nom || summary?.etablissement_nom || '',
+          'Code DESPS': evaluation.etablissement?.code_desps || summary?.code_desps || '',
+          Statut: evaluation.statut,
+          'Date de collecte': evaluation.date_collecte || '',
+          'Score global': numericValue(details.score?.score_global ?? summary?.score_global),
+          Classification: details.score?.classification || summary?.classification || ''
+        };
+
+        fixedQuestions.forEach(({ question }) => {
+          row[`${question.code} - ${question.libelle}`] = rawQuestionValue(details, question);
+        });
+        return row;
+      });
+
+      addSheet(
+        'Base brute',
+        baseRows,
+        [38, 25, 25, 35, 18, 16, 18, 16, 30, ...fixedQuestions.map(() => 24)]
+      );
+
+      const detailedRows: Record<string, ExcelValue>[] = [];
+      detailsList.forEach(details => {
+        const evaluation = details.evaluation;
+        const common = {
+          'ID évaluation': evaluation.id,
+          DRENA: evaluation.drena?.nom || '',
+          IEPP: evaluation.iepp?.nom || '',
+          Établissement: evaluation.etablissement?.nom || ''
+        };
+
+        FORM_SECTIONS.forEach(section => {
+          const questions = section.questions || [];
+          if (section.num === 16) {
+            details.membresBe.forEach((member, instanceIndex) => {
+              questions.forEach(question => {
+                const value = excelValue(objectField(member, question.storage_column));
+                detailedRows.push({
+                  ...common,
+                  Section: section.num,
+                  'Titre de section': section.titre,
+                  'N° instance': instanceIndex + 1,
+                  'Code question': question.code,
+                  Question: question.libelle,
+                  'Valeur brute': value,
+                  'Libellé de réponse': answerLabel(question, value),
+                  Commentaire: ''
+                });
+              });
+            });
+            return;
+          }
+
+          if (section.num === 20) {
+            details.equipes.forEach((member, instanceIndex) => {
+              questions.forEach(question => {
+                const value = excelValue(objectField(member, question.storage_column));
+                detailedRows.push({
+                  ...common,
+                  Section: section.num,
+                  'Titre de section': section.titre,
+                  'N° instance': instanceIndex + 1,
+                  'Code question': question.code,
+                  Question: question.libelle,
+                  'Valeur brute': value,
+                  'Libellé de réponse': answerLabel(question, value),
+                  Commentaire: ''
+                });
+              });
+            });
+            return;
+          }
+
+          questions.forEach(question => {
+            const value = rawQuestionValue(details, question);
+            const response = details.reponses.find(item => item.question_code === question.code);
+            const proof = question.storage_table === 'preuves_documentaires'
+              ? details.preuves.find(item => item.type_preuve === question.libelle)
+              : undefined;
+            detailedRows.push({
+              ...common,
+              Section: section.num,
+              'Titre de section': section.titre,
+              'N° instance': 1,
+              'Code question': question.code,
+              Question: question.libelle,
+              'Valeur brute': value,
+              'Libellé de réponse': answerLabel(question, value),
+              Commentaire: response?.commentaire || proof?.commentaire || ''
+            });
+          });
+        });
+      });
+
+      addSheet('Réponses détaillées', detailedRows, [38, 25, 25, 35, 10, 42, 12, 16, 55, 24, 32, 45]);
+
+      addSheet('Membres BE', detailsList.flatMap(details => details.membresBe.map((member, index) => ({
+        'ID évaluation': details.evaluation.id,
+        DRENA: details.evaluation.drena?.nom || '',
+        Établissement: details.evaluation.etablissement?.nom || '',
+        'N° membre': index + 1,
+        'Nom et prénoms': member.nom_prenoms,
+        Genre: member.genre,
+        Fonction: member.fonction,
+        'Lit et écrit le français': member.lit_ecrit_francais,
+        'Lit et écrit une langue locale': member.lit_ecrit_langue_locale,
+        'Niveau d’étude': member.niveau_etude || '',
+        Profession: member.profession || '',
+        'Formation COGES': member.formation_coges,
+        'Module de formation': member.module_formation || '',
+        'Maîtrise du rôle': member.maitrise_role
+      }))), [38, 25, 35, 12, 32, 14, 28, 24, 30, 22, 25, 20, 30, 20]);
+
+      addSheet('Preuves documentaires', detailsList.flatMap(details => details.preuves.map(proof => ({
+        'ID évaluation': details.evaluation.id,
+        DRENA: details.evaluation.drena?.nom || '',
+        Établissement: details.evaluation.etablissement?.nom || '',
+        'Type de preuve': proof.type_preuve,
+        Statut: proof.statut,
+        Commentaire: proof.commentaire || '',
+        'Nom du fichier': proof.fichier_nom_original || '',
+        'Date de téléversement': proof.uploaded_at || ''
+      }))), [38, 25, 35, 55, 30, 45, 35, 24]);
+
+      addSheet('Équipes évaluation', detailsList.flatMap(details => details.equipes.map((member, index) => ({
+        'ID évaluation': details.evaluation.id,
+        DRENA: details.evaluation.drena?.nom || '',
+        Établissement: details.evaluation.etablissement?.nom || '',
+        'N° évaluateur': index + 1,
+        'Nom et prénoms': member.nom_prenoms,
+        'Fonction / structure': member.fonction_structure
+      }))), [38, 25, 35, 14, 35, 35]);
+
+      workbook.Props = {
+        Title: 'Base brute des évaluations EROF',
+        Subject: 'Toutes les réponses aux questions du formulaire EROF',
+        Author: 'EROF',
+        CreatedDate: generatedAt
+      };
+      XLSX.writeFile(workbook, `base-brute-erof-${generatedAt.toISOString().slice(0, 10)}.xlsx`, {
+        compression: true
+      });
+    } catch (err) {
+      setError(formatUserFacingError('l’extraction de la base brute', err));
+    } finally {
+      setRawExporting(false);
+    }
+  };
+
   if (currentUser.role !== 'admin_national') {
     return (
       <div className="rounded-xl border border-rose-200 bg-rose-50 p-6 text-sm font-semibold text-rose-800">
@@ -419,13 +701,26 @@ export default function AdminStatistics({ currentUser }: { currentUser: User }) 
               <button
                 type="button"
                 onClick={exportExcel}
-                disabled={loading || exporting || statistics.regional.length === 0}
+                disabled={loading || exporting || rawExporting || statistics.regional.length === 0}
                 className="inline-flex items-center gap-2 rounded-lg border border-white/15 bg-white/10 px-3 py-2 text-xs font-bold text-white transition-colors hover:bg-white/15 disabled:opacity-50"
               >
                 {exporting
                   ? <RefreshCw className="h-4 w-4 animate-spin text-amber-400" />
                   : <Download className="h-4 w-4 text-amber-400" />}
                 {exporting ? 'Export en cours…' : 'Exporter vers Excel'}
+              </button>
+              <button
+                type="button"
+                onClick={exportRawDatabase}
+                disabled={loading || exporting || rawExporting || evaluations.length === 0}
+                className="inline-flex items-center gap-2 rounded-lg border border-white/15 bg-white/10 px-3 py-2 text-xs font-bold text-white transition-colors hover:bg-white/15 disabled:opacity-50"
+              >
+                {rawExporting
+                  ? <RefreshCw className="h-4 w-4 animate-spin text-amber-400" />
+                  : <Download className="h-4 w-4 text-amber-400" />}
+                {rawExporting
+                  ? `Extraction ${rawExportProgress.loaded}/${rawExportProgress.total}`
+                  : 'Base brute'}
               </button>
               <button
                 type="button"
