@@ -18,19 +18,19 @@ import {
   TrendingUp
 } from 'lucide-react';
 import { DataService, formatUserFacingError } from '../data/dataService';
-import { Drena, EvaluationStatus, User } from '../types';
+import { Drena, Evaluation, EvaluationScore, User } from '../types';
 
 const TARGET_PER_DRENA = 15;
 
-type DashboardEvaluation = {
-  id: string;
-  statut: EvaluationStatus;
+type DashboardEvaluation = Partial<Evaluation> & Pick<Evaluation, 'id' | 'statut'> & {
   drena_nom?: string;
   iepp_nom?: string;
   etablissement_nom?: string;
+  code_desps?: string;
   score_global?: number | null;
   classification?: string | null;
   validated_at?: string;
+  scores?: Partial<EvaluationScore>;
 };
 
 type SelectedEvaluation = DashboardEvaluation & {
@@ -106,10 +106,16 @@ function formatScore(value: number | null): string {
   return value === null ? '—' : value.toFixed(2).replace('.', ',');
 }
 
+function numericValue(value: unknown): number | '' {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : '';
+}
+
 export default function AdminStatistics({ currentUser }: { currentUser: User }) {
   const [evaluations, setEvaluations] = useState<DashboardEvaluation[]>([]);
   const [drenas, setDrenas] = useState<Drena[]>([]);
   const [loading, setLoading] = useState(true);
+  const [exporting, setExporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
@@ -228,41 +234,151 @@ export default function AdminStatistics({ currentUser }: { currentUser: User }) 
     };
   }, [drenas, evaluations]);
 
-  const exportCsv = () => {
-    const header = [
-      'DRENA',
-      'Cible',
-      'Saisies brutes',
-      'Saisies retenues',
-      'Validées retenues',
-      'Reste à valider/collecter',
-      'Évaluations excédentaires',
-      'Taux de couverture (%)',
-      'Taux de validation (%)',
-      'Score moyen'
-    ];
-    const rows = statistics.regional.map(item => [
-      item.drena,
-      String(TARGET_PER_DRENA),
-      String(item.rawEvaluations),
-      String(item.cappedEvaluations),
-      String(item.selectedValidated.length),
-      String(item.remainingValidation),
-      String(item.surplus),
-      String(item.coverageRate).replace('.', ','),
-      String(item.validationRate).replace('.', ','),
-      item.averageScore === null ? '' : item.averageScore.toFixed(2).replace('.', ',')
-    ]);
-    const csv = [header, ...rows]
-      .map(row => row.map(value => `"${value.replace(/"/g, '""')}"`).join(';'))
-      .join('\r\n');
-    const blob = new Blob([`\uFEFF${csv}`], { type: 'text/csv;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement('a');
-    anchor.href = url;
-    anchor.download = `bilan-erof-${new Date().toISOString().slice(0, 10)}.csv`;
-    anchor.click();
-    URL.revokeObjectURL(url);
+  const exportExcel = async () => {
+    setExporting(true);
+    setError(null);
+
+    try {
+      const XLSX = await import('@e965/xlsx');
+      const workbook = XLSX.utils.book_new();
+      const generatedAt = new Date();
+      const selectedIds = new Set(statistics.selected.map(item => item.id));
+      const excludedIds = new Set(statistics.excluded.map(item => item.id));
+      const validationRanks = new Map<string, number>();
+
+      statistics.regional.forEach(item => {
+        [...item.selectedValidated, ...item.excludedValidated].forEach((evaluation, index) => {
+          validationRanks.set(evaluation.id, index + 1);
+        });
+      });
+
+      const addSheet = (
+        name: string,
+        rows: Record<string, string | number | boolean>[],
+        widths: number[]
+      ) => {
+        const sheet = XLSX.utils.json_to_sheet(rows);
+        sheet['!cols'] = widths.map(width => ({ wch: width }));
+        if (sheet['!ref'] && rows.length > 0) {
+          const range = XLSX.utils.decode_range(sheet['!ref']);
+          sheet['!autofilter'] = {
+            ref: XLSX.utils.encode_range({
+              s: { r: range.s.r, c: range.s.c },
+              e: { r: range.s.r, c: range.e.c }
+            })
+          };
+        }
+        XLSX.utils.book_append_sheet(workbook, sheet, name);
+      };
+
+      addSheet('Synthèse nationale', [
+        { Indicateur: 'Date de génération', Valeur: generatedAt.toLocaleString('fr-FR') },
+        { Indicateur: 'Nombre de DRENA', Valeur: statistics.regional.length },
+        { Indicateur: 'Cible par DRENA', Valeur: TARGET_PER_DRENA },
+        { Indicateur: 'Cible nationale', Valeur: statistics.target },
+        { Indicateur: 'Saisies retenues', Valeur: statistics.cappedEvaluations },
+        { Indicateur: 'Saisies brutes', Valeur: evaluations.length },
+        { Indicateur: 'Taux de couverture (%)', Valeur: statistics.coverageRate },
+        { Indicateur: 'Validations retenues', Valeur: statistics.selected.length },
+        { Indicateur: 'Taux de validation (%)', Valeur: statistics.validationRate },
+        { Indicateur: 'Score moyen retenu', Valeur: numericValue(statistics.averageScore) },
+        { Indicateur: 'Score minimum retenu', Valeur: numericValue(statistics.minimumScore) },
+        { Indicateur: 'Score maximum retenu', Valeur: numericValue(statistics.maximumScore) },
+        { Indicateur: 'Évaluations hors plafond', Valeur: statistics.surplus },
+        { Indicateur: 'Validations exclues du Top 15', Valeur: statistics.excluded.length }
+      ], [34, 24]);
+
+      addSheet('Bilan par DRENA', statistics.regional.map(item => ({
+        DRENA: item.drena,
+        Cible: TARGET_PER_DRENA,
+        'Saisies brutes': item.rawEvaluations,
+        'Saisies retenues': item.cappedEvaluations,
+        'Validées disponibles': item.validatedAvailable,
+        'Validées retenues': item.selectedValidated.length,
+        'Reste à collecter': item.remainingCoverage,
+        'Reste à valider/collecter': item.remainingValidation,
+        'Évaluations excédentaires': item.surplus,
+        'Taux de couverture (%)': item.coverageRate,
+        'Taux de validation (%)': item.validationRate,
+        'Score moyen retenu': numericValue(item.averageScore)
+      })), [28, 10, 16, 17, 19, 18, 18, 24, 25, 23, 23, 22]);
+
+      addSheet('Toutes les évaluations', evaluations.map(evaluation => {
+        const score = evaluation.scores || {};
+        const retained = selectedIds.has(evaluation.id);
+        const excluded = excludedIds.has(evaluation.id);
+
+        return {
+          'ID évaluation': evaluation.id,
+          DRENA: evaluation.drena_nom || '',
+          IEPP: evaluation.iepp_nom || '',
+          Établissement: evaluation.etablissement_nom || '',
+          'Code DESPS': evaluation.code_desps || '',
+          Statut: evaluation.statut,
+          'Retenue dans le bilan': retained ? 'Oui' : 'Non',
+          'Position dans la DRENA': validationRanks.get(evaluation.id) || '',
+          'Motif de sélection': retained
+            ? 'Retenue dans le Top 15'
+            : excluded
+              ? 'Validée hors Top 15'
+              : 'Non validée',
+          'Date de collecte': evaluation.date_collecte || '',
+          'Date de soumission': evaluation.submitted_at || '',
+          'Date de validation': evaluation.validated_at || '',
+          Enquêteur: evaluation.enqueteur_id || '',
+          Président: evaluation.president_nom || '',
+          'Contact président': evaluation.president_contact || '',
+          Conseiller: evaluation.conseiller_nom || '',
+          'Contact conseiller': evaluation.conseiller_contact || '',
+          'Email conseiller': evaluation.conseiller_email || '',
+          'Effectif total': numericValue(evaluation.effectif_total),
+          Filles: numericValue(evaluation.effectif_filles),
+          Garçons: numericValue(evaluation.effectif_garcons),
+          'Score global': numericValue(evaluation.score_global),
+          Classification: evaluation.classification || '',
+          'Taux disponibilité preuves (%)': numericValue(score.taux_disponibilite_preuves),
+          'Axe 1 - Structure institutionnelle': numericValue(score.score_axe1),
+          'Axe 2 - Fonctionnement interne': numericValue(score.score_axe2),
+          'Axe 3 - Gestion administrative': numericValue(score.score_axe3),
+          'Axe 4 - Gestion financière': numericValue(score.score_axe4),
+          'Axe 5 - Planification': numericValue(score.score_axe5),
+          'Axe 6 - Partenariats': numericValue(score.score_axe6),
+          'Axe 7 - Contribution qualité': numericValue(score.score_axe7),
+          'Axe 8 - Santé et inclusion': numericValue(score.score_axe8),
+          'Axe 9 - Participation communautaire': numericValue(score.score_axe9),
+          'Axe 10 - Genre': numericValue(score.score_axe10),
+          'Axe 11 - Résilience': numericValue(score.score_axe11),
+          'Axe 12 - Formation': numericValue(score.score_axe12),
+          'Observations générales': evaluation.observations_generales || '',
+          'Créée le': evaluation.created_at || '',
+          'Mise à jour le': evaluation.updated_at || ''
+        };
+      }), [
+        38, 25, 25, 35, 18, 16, 20, 22, 24, 18, 20, 20, 36, 28, 20, 28, 20, 28,
+        14, 12, 12, 15, 30, 30, 24, 24, 27, 24, 22, 22, 25, 24, 32, 20, 22, 22, 45, 20, 20
+      ]);
+
+      addSheet('Classifications', statistics.classifications.map(item => ({
+        Classification: item.label,
+        'Nombre d’évaluations retenues': item.count,
+        'Part des évaluations retenues (%)': percent(item.count, statistics.selected.length)
+      })), [36, 32, 36]);
+
+      workbook.Props = {
+        Title: 'Bilan statistique EROF',
+        Subject: 'Export complet du bilan statistique national',
+        Author: 'EROF',
+        CreatedDate: generatedAt
+      };
+
+      XLSX.writeFile(workbook, `bilan-statistique-erof-${generatedAt.toISOString().slice(0, 10)}.xlsx`, {
+        compression: true
+      });
+    } catch (err) {
+      setError(formatUserFacingError('l’export Excel du bilan statistique', err));
+    } finally {
+      setExporting(false);
+    }
   };
 
   if (currentUser.role !== 'admin_national') {
@@ -302,12 +418,14 @@ export default function AdminStatistics({ currentUser }: { currentUser: User }) 
               </button>
               <button
                 type="button"
-                onClick={exportCsv}
-                disabled={loading || statistics.regional.length === 0}
+                onClick={exportExcel}
+                disabled={loading || exporting || statistics.regional.length === 0}
                 className="inline-flex items-center gap-2 rounded-lg border border-white/15 bg-white/10 px-3 py-2 text-xs font-bold text-white transition-colors hover:bg-white/15 disabled:opacity-50"
               >
-                <Download className="h-4 w-4 text-amber-400" />
-                Exporter
+                {exporting
+                  ? <RefreshCw className="h-4 w-4 animate-spin text-amber-400" />
+                  : <Download className="h-4 w-4 text-amber-400" />}
+                {exporting ? 'Export en cours…' : 'Exporter vers Excel'}
               </button>
               <button
                 type="button"
