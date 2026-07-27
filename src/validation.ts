@@ -131,7 +131,10 @@ export function validateEvaluationForSubmission(input: ValidationInput): string[
     const { min, max } = section20.repeat_instances;
     if (input.equipes.length < min) errors.push(`Équipe d'évaluation : au moins ${min} évaluateur(s) requis.`);
     if (input.equipes.length > max) errors.push(`Équipe d'évaluation : maximum ${max} évaluateurs.`);
-    input.equipes.forEach((membre, idx) => {
+    // Rows beyond the configured maximum must be removed, not completed.
+    // Validating them as required fields produced misleading "Évaluateur 5/6"
+    // messages alongside the actual maximum-size error.
+    input.equipes.slice(0, max).forEach((membre, idx) => {
       for (const q of section20.questions) {
         checkQuestion(q.code, `Évaluateur ${idx + 1} - ${q.libelle}`, !!q.required, q.validation, (membre as any)[q.storage_column], errors);
       }

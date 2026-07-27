@@ -1418,7 +1418,12 @@ export class SupabaseDataService {
     const [reps, members, teams, recs, proofs, sc] = await Promise.all([
       supabase!.from('evaluation_reponses').select('*').eq('evaluation_id', id),
       supabase!.from('membres_be').select('*').eq('evaluation_id', id),
-      supabase!.from('equipes_evaluation').select('*').eq('evaluation_id', id),
+      supabase!
+        .from('equipes_evaluation')
+        .select('*')
+        .eq('evaluation_id', id)
+        .order('created_at', { ascending: true })
+        .order('id', { ascending: true }),
       supabase!.from('recommandations').select('*').eq('evaluation_id', id).maybeSingle(),
       supabase!.from('preuves_documentaires').select('*').eq('evaluation_id', id),
       supabase!.from('evaluation_scores').select('*').eq('evaluation_id', id).maybeSingle()
@@ -1696,6 +1701,30 @@ export class SupabaseDataService {
       const equipesPayload = equipes.map(member => buildEquipeEvaluationPayload(member, evaluationId, now));
       const { error: eqErr } = await supabase!.from('equipes_evaluation').upsert(equipesPayload);
       if (eqErr) return { success: false, error: toUserError("l'enregistrement de l'équipe d'évaluation", eqErr) };
+    }
+    // An upsert does not remove rows that disappeared from the form. Without
+    // this reconciliation, deleted evaluators reappear when the draft is
+    // reopened and accumulate beyond the configured maximum.
+    const submittedEquipeIds = new Set(
+      equipes
+        .map(member => cleanUuid(member.id))
+        .filter((id): id is string => !!id)
+    );
+    const removedEquipeIds = (existingDetails?.equipes || [])
+      .map(member => cleanUuid(member.id))
+      .filter((id): id is string => !!id && !submittedEquipeIds.has(id));
+    if (removedEquipeIds.length > 0) {
+      const { error: eqDeleteErr } = await supabase!
+        .from('equipes_evaluation')
+        .delete()
+        .eq('evaluation_id', evaluationId)
+        .in('id', removedEquipeIds);
+      if (eqDeleteErr) {
+        return {
+          success: false,
+          error: toUserError("la suppression des anciens membres de l'équipe d'évaluation", eqDeleteErr)
+        };
+      }
     }
     if (recommandations) {
       const { error: recErr } = await supabase!.from('recommandations').upsert({

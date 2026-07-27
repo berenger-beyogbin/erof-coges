@@ -107,6 +107,10 @@ export default function EvaluationForm({ currentUser, evaluationId, onClose }: E
   const lastSectionIdx = Math.max(sections.length - 1, 0);
   const safeActiveSectionIdx = Math.min(Math.max(activeSectionIdx, 0), lastSectionIdx);
   const currentSection = sections[safeActiveSectionIdx] || sections[0];
+  const evaluationTeamLimits = (sections.find(section => section.num === 20)?.repeat_instances || { min: 1, max: 4 }) as {
+    min: number;
+    max: number;
+  };
   const isDraftLikeStatus = evaluation.statut === 'brouillon' || evaluation.statut === 'en_revision';
   const saveButtonLabel = isDraftLikeStatus ? 'Enregistrer brouillon' : 'Enregistrement verrouillé';
   const isFormBusy = saving || navigationSaving || isClosingDraft || isSubmitting || uploadingProofIdx !== null;
@@ -826,8 +830,8 @@ export default function EvaluationForm({ currentUser, evaluationId, onClose }: E
 
   // Handle Repeat section 20 (Team addition/deletion)
   const handleTeamMemberAdd = () => {
-    if (equipesRef.current.length >= 4) {
-      alert('Maximum 4 évaluateurs autorisés.');
+    if (equipesRef.current.length >= evaluationTeamLimits.max) {
+      alert(`Maximum ${evaluationTeamLimits.max} évaluateurs autorisés.`);
       return;
     }
     const next = [
@@ -844,8 +848,8 @@ export default function EvaluationForm({ currentUser, evaluationId, onClose }: E
   };
 
   const handleTeamMemberRemove = (idx: number) => {
-    if (equipesRef.current.length <= 1) {
-      alert('Au moins un évaluateur requis.');
+    if (equipesRef.current.length <= evaluationTeamLimits.min) {
+      alert(`Au moins ${evaluationTeamLimits.min} évaluateur requis.`);
       return;
     }
     const next = equipesRef.current.filter((_, i) => i !== idx);
@@ -1181,6 +1185,17 @@ export default function EvaluationForm({ currentUser, evaluationId, onClose }: E
           ) : currentSection.num === 20 ? (
             /* SECTION 20 REPEATABLE EVALUATORS TEAM LIST */
             <div className="space-y-4">
+              {equipes.length > evaluationTeamLimits.max && (
+                <div className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-xs text-amber-900">
+                  <p className="font-bold">
+                    Trop de membres enregistrés ({equipes.length}/{evaluationTeamLimits.max})
+                  </p>
+                  <p className="mt-1">
+                    Supprimez {equipes.length - evaluationTeamLimits.max} membre(s) avec l’icône corbeille,
+                    puis enregistrez le brouillon avant de soumettre.
+                  </p>
+                </div>
+              )}
               <div className="flex items-center justify-between border-b border-gray-100 pb-2">
                 <h4 className="text-xs font-bold text-gray-700 uppercase tracking-wider">Membres de l'équipe d'évaluation</h4>
                 <button
