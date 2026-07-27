@@ -485,9 +485,31 @@ export default function AdminStatistics({ currentUser }: { currentUser: User }) 
       const XLSX = await import('@e965/xlsx');
       const workbook = XLSX.utils.book_new();
       const generatedAt = new Date();
+      const proofLinkLifetimeSeconds = 7 * 24 * 60 * 60;
+      const proofLinksExpireAt = new Date(generatedAt.getTime() + proofLinkLifetimeSeconds * 1000);
       const fixedQuestions = FORM_SECTIONS
         .filter(section => section.num !== 16 && section.num !== 20)
         .flatMap(section => (section.questions || []).map(question => ({ section, question })));
+      const proofLinks = new Map<string, { url: string; error: string }>();
+      const proofsWithFiles = detailsList.flatMap(details =>
+        details.preuves.filter(proof => Boolean(proof.fichier_path))
+      );
+
+      for (let index = 0; index < proofsWithFiles.length; index += batchSize) {
+        const proofBatch = proofsWithFiles.slice(index, index + batchSize);
+        const linkResults = await Promise.all(
+          proofBatch.map(proof =>
+            DataService.getPreuveFileUrl(proof.fichier_path || '', proofLinkLifetimeSeconds)
+          )
+        );
+        proofBatch.forEach((proof, proofIndex) => {
+          const result = linkResults[proofIndex];
+          proofLinks.set(proof.id, {
+            url: result.success && result.url ? result.url : '',
+            error: result.success ? '' : result.error || 'Lien indisponible'
+          });
+        });
+      }
 
       const addSheet = (
         name: string,
@@ -506,6 +528,7 @@ export default function AdminStatistics({ currentUser }: { currentUser: User }) 
           };
         }
         XLSX.utils.book_append_sheet(workbook, sheet, name);
+        return sheet;
       };
 
       const baseRows = detailsList.map(details => {
@@ -627,7 +650,7 @@ export default function AdminStatistics({ currentUser }: { currentUser: User }) 
         'Maîtrise du rôle': member.maitrise_role
       }))), [38, 25, 35, 12, 32, 14, 28, 24, 30, 22, 25, 20, 30, 20]);
 
-      addSheet('Preuves documentaires', detailsList.flatMap(details => details.preuves.map(proof => ({
+      const proofRows = detailsList.flatMap(details => details.preuves.map(proof => ({
         'ID évaluation': details.evaluation.id,
         DRENA: details.evaluation.drena?.nom || '',
         Établissement: details.evaluation.etablissement?.nom || '',
@@ -635,8 +658,31 @@ export default function AdminStatistics({ currentUser }: { currentUser: User }) 
         Statut: proof.statut,
         Commentaire: proof.commentaire || '',
         'Nom du fichier': proof.fichier_nom_original || '',
+        'Lien de consultation': proofLinks.get(proof.id)?.url || '',
+        'Expiration du lien': proofLinks.get(proof.id)?.url
+          ? proofLinksExpireAt.toLocaleString('fr-FR')
+          : '',
+        'Erreur du lien': proofLinks.get(proof.id)?.error || '',
         'Date de téléversement': proof.uploaded_at || ''
-      }))), [38, 25, 35, 55, 30, 45, 35, 24]);
+      })));
+      const proofSheet = addSheet(
+        'Preuves documentaires',
+        proofRows,
+        [38, 25, 35, 55, 30, 45, 35, 24, 24, 35, 24]
+      );
+      proofRows.forEach((row, index) => {
+        const url = String(row['Lien de consultation'] || '');
+        if (!url) return;
+        const cellAddress = XLSX.utils.encode_cell({ r: index + 1, c: 7 });
+        proofSheet[cellAddress] = {
+          t: 's',
+          v: 'Consulter la preuve',
+          l: {
+            Target: url,
+            Tooltip: `Lien sécurisé valable jusqu’au ${proofLinksExpireAt.toLocaleString('fr-FR')}`
+          }
+        };
+      });
 
       addSheet('Équipes évaluation', detailsList.flatMap(details => details.equipes.map((member, index) => ({
         'ID évaluation': details.evaluation.id,

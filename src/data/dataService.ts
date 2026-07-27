@@ -1002,7 +1002,8 @@ export class LocalDemoService {
   }
 
   static async getPreuveFileUrl(
-    filePath: string
+    filePath: string,
+    _expiresInSeconds = 60 * 10
   ): Promise<{ success: boolean; url?: string; error?: string }> {
     if (!filePath) return { success: false, error: 'Aucun fichier n’est associé à cette preuve.' };
     if (/^https?:\/\//i.test(filePath)) return { success: true, url: filePath };
@@ -1976,7 +1977,8 @@ export class SupabaseDataService {
   }
 
   static async getPreuveFileUrl(
-    filePath: string
+    filePath: string,
+    expiresInSeconds = 60 * 10
   ): Promise<{ success: boolean; url?: string; error?: string }> {
     if (!filePath) return { success: false, error: 'Aucun fichier n’est associé à cette preuve.' };
     if (/^https?:\/\//i.test(filePath)) return { success: true, url: filePath };
@@ -1984,7 +1986,7 @@ export class SupabaseDataService {
     const normalizedPath = normalizePreuveStoragePath(filePath);
     const { data, error } = await supabase!.storage
       .from(PREUVES_BUCKET)
-      .createSignedUrl(normalizedPath, 60 * 10);
+      .createSignedUrl(normalizedPath, expiresInSeconds);
 
     if (error || !data?.signedUrl) {
       return {
@@ -2310,12 +2312,13 @@ export class DataService {
   }
 
   static async getPreuveFileUrl(
-    filePath: string
+    filePath: string,
+    expiresInSeconds = 60 * 10
   ): Promise<{ success: boolean; url?: string; error?: string }> {
     if (isSupabaseConfigured) {
-      return await SupabaseDataService.getPreuveFileUrl(filePath);
+      return await SupabaseDataService.getPreuveFileUrl(filePath, expiresInSeconds);
     }
-    return await LocalDemoService.getPreuveFileUrl(filePath);
+    return await LocalDemoService.getPreuveFileUrl(filePath, expiresInSeconds);
   }
 
   static async getAuditLogs(): Promise<AuditLog[]> {
