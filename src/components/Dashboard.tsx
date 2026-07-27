@@ -568,9 +568,34 @@ export default function Dashboard({ currentUser, onEditEvaluation, onNewEvaluati
     }
   };
 
-  // Simulate PDF print download
   const handlePrintPDF = () => {
-    window.print();
+    if (!selectedDetails) {
+      setActionError('Sélectionnez une évaluation avant de générer la fiche PDF.');
+      return;
+    }
+
+    const originalTitle = document.title;
+    const establishmentName = selectedDetails.evaluation.etablissement?.nom || 'COGES';
+    const safeName = establishmentName
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-zA-Z0-9_-]+/g, '_')
+      .replace(/^_+|_+$/g, '');
+    const cleanup = () => {
+      document.body.classList.remove('evaluation-print-mode');
+      document.title = originalTitle;
+    };
+
+    document.title = `Fiche_COGES_${safeName || 'evaluation'}_${new Date().toISOString().slice(0, 10)}`;
+    document.body.classList.add('evaluation-print-mode');
+    window.addEventListener('afterprint', cleanup, { once: true });
+
+    try {
+      window.print();
+    } catch (err) {
+      cleanup();
+      setActionError(formatUserFacingError('l’impression de la fiche COGES', err));
+    }
   };
 
   // Filter evaluations based on user selections
@@ -970,7 +995,10 @@ export default function Dashboard({ currentUser, onEditEvaluation, onNewEvaluati
         </div>
 
         {/* Detailed reports drawer - 1 col on wide */}
-        <div className="min-w-0 bg-white rounded-xl border border-slate-200 shadow-sm p-6 flex flex-col min-h-[500px]">
+        <div
+          id="selected-evaluation-print"
+          className="min-w-0 bg-white rounded-xl border border-slate-200 shadow-sm p-6 flex flex-col min-h-[500px]"
+        >
           {!selectedEvalId ? (
             <div className="flex-1 flex flex-col items-center justify-center text-center p-6 text-slate-400 space-y-4">
               <FileText className="h-12 w-12 text-slate-200" />
@@ -1025,7 +1053,7 @@ export default function Dashboard({ currentUser, onEditEvaluation, onNewEvaluati
                     an initial gate. "Valider" stays available only while the record hasn't been auto-validated yet. */}
                 {['admin_national', 'superviseur_drena', 'superviseur_iepp'].includes(currentUser.role) &&
                  ['soumis', 'en_revision', 'brouillon', 'valide'].includes(selectedDetails.evaluation.statut) && (
-                  <div className="space-y-3 pt-2 border-t border-slate-200">
+                  <div className="space-y-3 pt-2 border-t border-slate-200" data-print-exclude="true">
                     <p className="text-xs font-bold text-slate-700 uppercase tracking-wider">Actions de supervision</p>
 
                     <textarea
@@ -1085,7 +1113,7 @@ export default function Dashboard({ currentUser, onEditEvaluation, onNewEvaluati
 
                 {/* ADMIN ONLY UNLOCKING */}
                 {currentUser.role === 'admin_national' && selectedDetails.evaluation.statut === 'verrouille' && (
-                  <div className="space-y-3 pt-2 border-t border-slate-200">
+                  <div className="space-y-3 pt-2 border-t border-slate-200" data-print-exclude="true">
                     <p className="text-xs font-bold text-slate-700 uppercase tracking-wider">Déverrouillage administratif</p>
                     <textarea
                       placeholder="Motif obligatoire du déverrouillage..."
@@ -1106,18 +1134,18 @@ export default function Dashboard({ currentUser, onEditEvaluation, onNewEvaluati
 
                 {/* ERROR/SUCCESS MESSAGES */}
                 {actionSuccess && (
-                  <div className="p-2 bg-emerald-50 border border-emerald-200 rounded text-[11px] text-emerald-800 font-medium">
+                  <div data-print-exclude="true" className="p-2 bg-emerald-50 border border-emerald-200 rounded text-[11px] text-emerald-800 font-medium">
                     {actionSuccess}
                   </div>
                 )}
                 {actionError && (
-                  <div className="p-2 bg-rose-50 border border-rose-200 rounded text-[11px] text-rose-800 font-medium flex items-center space-x-1">
+                  <div data-print-exclude="true" className="p-2 bg-rose-50 border border-rose-200 rounded text-[11px] text-rose-800 font-medium flex items-center space-x-1">
                     <AlertTriangle className="h-4 w-4 shrink-0 text-rose-600" />
                     <span>{actionError}</span>
                   </div>
                 )}
                 {fileOpenError && (
-                  <div className="p-2 bg-rose-50 border border-rose-200 rounded text-[11px] text-rose-800 font-medium flex items-center space-x-1">
+                  <div data-print-exclude="true" className="p-2 bg-rose-50 border border-rose-200 rounded text-[11px] text-rose-800 font-medium flex items-center space-x-1">
                     <AlertTriangle className="h-4 w-4 shrink-0 text-rose-600" />
                     <span>{fileOpenError}</span>
                   </div>
@@ -1277,7 +1305,7 @@ export default function Dashboard({ currentUser, onEditEvaluation, onNewEvaluati
               )}
 
               {/* GLOBAL EXPORTS FROM DETAILS DRAWER */}
-              <div className="border-t border-slate-200 pt-4 mt-auto grid grid-cols-3 gap-2">
+              <div data-print-exclude="true" className="border-t border-slate-200 pt-4 mt-auto grid grid-cols-3 gap-2">
                 <button
                   onClick={() => setShowFilledForm(true)}
                   className="bg-[#0F172A] hover:bg-slate-800 text-white font-bold py-2 px-3 rounded border border-slate-800 text-xs transition-colors flex items-center justify-center space-x-1.5 shadow-sm"

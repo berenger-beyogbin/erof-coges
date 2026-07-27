@@ -206,6 +206,11 @@ table {
 
 /* Custom print layouts for direct physical COGES sheets */
 @media print {
+  @page {
+    size: A4;
+    margin: 12mm;
+  }
+
   body {
     background: white;
     color: black;
@@ -221,5 +226,47 @@ table {
   #axes-scroll {
     max-height: none !important;
     overflow: visible !important;
+  }
+
+  body.evaluation-print-mode * {
+    visibility: hidden !important;
+  }
+
+  body.evaluation-print-mode #selected-evaluation-print,
+  body.evaluation-print-mode #selected-evaluation-print * {
+    visibility: visible !important;
+  }
+
+  body.evaluation-print-mode #selected-evaluation-print {
+    position: absolute !important;
+    inset: 0 auto auto 0 !important;
+    display: block !important;
+    width: 100% !important;
+    min-height: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    overflow: visible !important;
+    background: white !important;
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+
+  body.evaluation-print-mode #selected-evaluation-print [data-print-exclude="true"] {
+    display: none !important;
+  }
+
+  body.evaluation-print-mode #selected-evaluation-print [class*="max-h-"] {
+    max-height: none !important;
+    overflow: visible !important;
+  }
+
+  body.evaluation-print-mode #selected-evaluation-print .truncate {
+    max-width: none !important;
+    overflow: visible !important;
+    white-space: normal !important;
+    text-overflow: clip !important;
   }
 }
