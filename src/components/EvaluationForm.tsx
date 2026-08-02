@@ -34,8 +34,10 @@ import {
   ChevronRight,
   ShieldAlert,
   Loader,
-  ExternalLink
+  ExternalLink,
+  Printer
 } from 'lucide-react';
+import PrintableEvaluationForm from './PrintableEvaluationForm';
 
 interface EvaluationFormProps {
   currentUser: User;
@@ -891,6 +893,14 @@ export default function EvaluationForm({ currentUser, evaluationId, onClose }: E
     setEtablissementUpdates(etablissementUpdatesRef.current);
   };
 
+  const printBlankForm = () => {
+    document.body.classList.add('blank-form-print-mode');
+    const cleanup = () => document.body.classList.remove('blank-form-print-mode');
+    window.addEventListener('afterprint', cleanup, { once: true });
+    window.print();
+    window.setTimeout(cleanup, 1000);
+  };
+
   if (loading) {
     return (
       <div className="p-12 text-center flex flex-col items-center justify-center space-y-4 bg-white rounded-xl shadow border border-slate-200">
@@ -901,6 +911,7 @@ export default function EvaluationForm({ currentUser, evaluationId, onClose }: E
   }
 
   return (
+    <>
     <div className="bg-white rounded-xl border border-slate-200 shadow-lg overflow-hidden flex flex-col lg:flex-row min-h-[650px]">
       
       {/* Side step navigator (20 sections list) */}
@@ -955,6 +966,14 @@ export default function EvaluationForm({ currentUser, evaluationId, onClose }: E
 
         {/* Action button bottom left */}
         <div className="p-4 border-t border-slate-200 bg-white">
+          <button
+            type="button"
+            onClick={printBlankForm}
+            className="w-full mb-2 bg-white hover:bg-amber-50 text-slate-800 font-bold py-2 px-3 rounded border border-slate-300 text-xs transition-colors flex items-center justify-center space-x-2"
+          >
+            <Printer className="h-3.5 w-3.5" />
+            <span>Version imprimable</span>
+          </button>
           <button
             onClick={() => saveDraft(false)}
             disabled={noActiveCampagne || isFormBusy}
@@ -1537,5 +1556,7 @@ export default function EvaluationForm({ currentUser, evaluationId, onClose }: E
 
       </div>
     </div>
+    <PrintableEvaluationForm />
+    </>
   );
 }

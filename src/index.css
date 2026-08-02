@@ -205,6 +205,10 @@ table {
 }
 
 /* Custom print layouts for direct physical COGES sheets */
+#printable-evaluation-form {
+  display: none;
+}
+
 @media print {
   @page {
     size: A4;
@@ -269,4 +273,49 @@ table {
     white-space: normal !important;
     text-overflow: clip !important;
   }
+
+  body.blank-form-print-mode * {
+    visibility: hidden !important;
+  }
+
+  body.blank-form-print-mode #printable-evaluation-form,
+  body.blank-form-print-mode #printable-evaluation-form * {
+    visibility: visible !important;
+  }
+
+  body.blank-form-print-mode #printable-evaluation-form {
+    display: block !important;
+    position: absolute;
+    inset: 0 auto auto 0;
+    width: 100%;
+    color: #111827;
+    font-family: Arial, sans-serif;
+    font-size: 9.5pt;
+    line-height: 1.3;
+  }
+
+  .print-form-cover { border: 2px solid #0f172a; padding: 9mm; margin-bottom: 7mm; }
+  .print-form-cover h1 { font-size: 20pt; margin: 2mm 0; color: #0f172a; }
+  .print-form-cover p { margin: 1.5mm 0; }
+  .print-form-kicker { font-size: 8pt; font-weight: 700; text-transform: uppercase; }
+  .print-form-meta { display: flex; justify-content: space-between; gap: 8mm; margin-top: 8mm; font-weight: 700; }
+  .print-form-instructions { margin-top: 7mm !important; padding: 3mm; background: #f1f5f9; }
+  .print-form-section { break-before: page; }
+  .print-form-section-title { display: flex; gap: 4mm; align-items: flex-start; border-bottom: 2px solid #0f172a; padding-bottom: 3mm; margin-bottom: 3mm; }
+  .print-form-section-title > span { display: grid; place-items: center; width: 9mm; height: 9mm; background: #0f172a; color: white; font-weight: 800; font-size: 12pt; }
+  .print-form-section-title h2 { margin: 0; font-size: 14pt; color: #0f172a; }
+  .print-form-section-title p { margin: 1mm 0 0; font-size: 8pt; color: #475569; }
+  .print-form-intro, .print-form-repeat-list { padding: 2.5mm; border: 1px solid #cbd5e1; background: #f8fafc; margin: 3mm 0; }
+  .print-form-question { break-inside: avoid; border-bottom: 1px solid #cbd5e1; padding: 2.5mm 0; }
+  .print-form-label { margin-bottom: 2mm; }
+  .print-required { color: #b91c1c; }
+  .print-form-options { display: flex; flex-wrap: wrap; gap: 2mm 7mm; }
+  .print-form-options span { display: inline-flex; align-items: center; gap: 1.5mm; }
+  .print-form-options i { width: 4mm; height: 4mm; border: 1px solid #111827; display: inline-block; }
+  .print-form-lines { display: grid; gap: 3.5mm; padding-top: 2mm; }
+  .print-form-lines i { display: block; border-bottom: 1px dotted #475569; height: 3mm; }
+  .print-form-hint { margin: 1.5mm 0 0; color: #64748b; font-size: 7.5pt; font-style: italic; }
+  .print-form-repeat-note { border: 1px dashed #64748b; padding: 2mm; font-style: italic; }
+  .print-form-signatures { break-before: page; display: flex; justify-content: space-between; gap: 20mm; padding-top: 25mm; }
+  .print-form-signatures div { width: 48%; border-top: 1px solid #111827; padding-top: 2mm; text-align: center; }
 }
