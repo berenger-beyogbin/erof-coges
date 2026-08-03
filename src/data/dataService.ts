@@ -20,8 +20,11 @@ import {
   EquipeEvaluation,
   Recommandation,
   AuditLog,
-  EvaluationStatus
+  EvaluationStatus,
+  SelectionErof,
+  EvaluationNiveau2
 } from '../types';
+import { computeNiveau2Scores } from '../niveau2Scoring';
 import { supabase, isSupabaseConfigured } from '../supabaseClient';
 import { validateEvaluationForSubmission } from '../validation';
 
@@ -513,6 +516,8 @@ export class LocalDemoService {
     getStoredItem<EquipeEvaluation[]>('equipes', []);
     getStoredItem<Recommandation[]>('recommandations', []);
     getStoredItem<AuditLog[]>('audit_logs', []);
+    getStoredItem<SelectionErof[]>('selections_erof', []);
+    getStoredItem<EvaluationNiveau2[]>('evaluations_niveau_2', []);
   }
 
   static async registerEnqueteur(input: {
@@ -1115,6 +1120,55 @@ export class LocalDemoService {
 
   static async resetUserPassword(_id: string, _newPassword: string): Promise<{ success: boolean; error?: string }> {
     return { success: false, error: "La réinitialisation de mot de passe n'est disponible qu'en mode Supabase (production)." };
+  }
+  static async getNiveau2Selections(user: User, campagneId?: string): Promise<SelectionErof[]> {
+    const selections = getStoredItem<SelectionErof[]>('selections_erof', []);
+    const niveau2 = getStoredItem<EvaluationNiveau2[]>('evaluations_niveau_2', []);
+    const evaluations = await this.getEvaluations(user);
+    const visible = new Map(evaluations.map(e => [e.id, e]));
+    return selections.filter(s => (!campagneId || s.campagne_id === campagneId) && visible.has(s.evaluation_id))
+      .map(s => ({ ...s, evaluation: visible.get(s.evaluation_id), niveau2: niveau2.find(n => n.selection_erof_id === s.id) || null }));
+  }
+
+  static async addNiveau2Selection(evaluationId: string, user: User): Promise<{ success: boolean; error?: string }> {
+    if (user.role !== 'admin_national') return { success: false, error: 'Action réservée à la DAPS-COGES.' };
+    const evaluations = getStoredItem<Evaluation[]>('evaluations', []);
+    const evaluation = evaluations.find(e => e.id === evaluationId);
+    if (!evaluation || !['valide', 'verrouille'].includes(evaluation.statut)) return { success: false, error: 'Cette évaluation EROF n’est pas éligible.' };
+    const scores = getStoredItem<EvaluationScore[]>('scores', []);
+    const score = scores.find(s => s.evaluation_id === evaluationId);
+    if (!score) return { success: false, error: 'Le score EROF est indisponible.' };
+    const selections = getStoredItem<SelectionErof[]>('selections_erof', []);
+    const campaignSelections = selections.filter(s => s.campagne_id === evaluation.campagne_id);
+    if (campaignSelections.length >= 15) return { success: false, error: 'La campagne comporte déjà 15 COGES présélectionnés.' };
+    if (campaignSelections.some(s => s.evaluation_id === evaluationId)) return { success: false, error: 'Ce COGES est déjà présélectionné.' };
+    const ranked = evaluations.filter(e => e.campagne_id === evaluation.campagne_id && ['valide', 'verrouille'].includes(e.statut))
+      .map(e => ({ id: e.id, score: scores.find(s => s.evaluation_id === e.id)?.score_global ?? -1 }))
+      .sort((a, b) => b.score - a.score || a.id.localeCompare(b.id));
+    const row: SelectionErof = { id: crypto.randomUUID(), campagne_id: evaluation.campagne_id, evaluation_id: evaluationId,
+      rang_erof: ranked.findIndex(e => e.id === evaluationId) + 1, score_erof: score.score_global,
+      selectionne_par: user.id, selectionne_le: new Date().toISOString() };
+    setStoredItem('selections_erof', [...selections, row]);
+    return { success: true };
+  }
+
+  static async removeNiveau2Selection(selectionId: string, user: User): Promise<{ success: boolean; error?: string }> {
+    if (user.role !== 'admin_national') return { success: false, error: 'Action réservée à la DAPS-COGES.' };
+    setStoredItem('selections_erof', getStoredItem<SelectionErof[]>('selections_erof', []).filter(s => s.id !== selectionId));
+    setStoredItem('evaluations_niveau_2', getStoredItem<EvaluationNiveau2[]>('evaluations_niveau_2', []).filter(n => n.selection_erof_id !== selectionId));
+    return { success: true };
+  }
+
+  static async saveNiveau2(selectionId: string, input: Partial<EvaluationNiveau2>, user: User): Promise<{ success: boolean; error?: string }> {
+    if (input.statut === 'valide' && user.role !== 'admin_national') return { success: false, error: 'Seule la DAPS-COGES peut valider la grille.' };
+    const rows = getStoredItem<EvaluationNiveau2[]>('evaluations_niveau_2', []);
+    const existing = rows.find(n => n.selection_erof_id === selectionId);
+    const base = { ...existing, ...input } as EvaluationNiveau2;
+    const row: EvaluationNiveau2 = { ...base, ...computeNiveau2Scores(base), id: existing?.id || crypto.randomUUID(), selection_erof_id: selectionId,
+      effectif_prescolaire: base.existence_prescolaire ? Number(base.effectif_prescolaire || 0) : 0,
+      saisi_par: user.id, updated_at: new Date().toISOString(), created_at: existing?.created_at || new Date().toISOString() };
+    setStoredItem('evaluations_niveau_2', [...rows.filter(n => n.selection_erof_id !== selectionId), row]);
+    return { success: true };
   }
 }
 
@@ -2120,6 +2174,48 @@ export class SupabaseDataService {
     if (data?.error) return { success: false, error: formatUserFacingError('la réinitialisation du mot de passe', data.error) };
     return { success: true };
   }
+
+  static async getNiveau2Selections(_user: User, campagneId?: string): Promise<SelectionErof[]> {
+    let query = supabase!.from('selections_erof').select(`*, evaluations(*, etablissements(nom, iepps(nom, drenas(nom)))), evaluations_niveau_2(*)`).order('rang_erof');
+    if (campagneId) query = query.eq('campagne_id', campagneId);
+    const { data, error } = await query;
+    if (error) throw new Error(toUserError('le chargement de la sélection de niveau 2', error));
+    return (data || []).map((row: any) => {
+      const ev = row.evaluations;
+      const etab = ev?.etablissements;
+      return { ...row, evaluation: ev ? { ...ev, etablissement_nom: etab?.nom, iepp_nom: etab?.iepps?.nom, drena_nom: etab?.iepps?.drenas?.nom } : undefined,
+        niveau2: Array.isArray(row.evaluations_niveau_2) ? row.evaluations_niveau_2[0] || null : row.evaluations_niveau_2 || null };
+    });
+  }
+
+  static async addNiveau2Selection(evaluationId: string, user: User): Promise<{ success: boolean; error?: string }> {
+    if (user.role !== 'admin_national') return { success: false, error: 'Action réservée à la DAPS-COGES.' };
+    const { data: ev, error: evError } = await supabase!.from('evaluations').select('id,campagne_id,statut,evaluation_scores(score_global)').eq('id', evaluationId).single();
+    if (evError || !ev) return { success: false, error: toUserError('la lecture de l’évaluation EROF', evError) };
+    const { count } = await supabase!.from('selections_erof').select('*', { count: 'exact', head: true }).eq('campagne_id', ev.campagne_id);
+    if ((count || 0) >= 15) return { success: false, error: 'La campagne comporte déjà 15 COGES présélectionnés.' };
+    const { data: ranked, error: rankError } = await supabase!.from('evaluations').select('id,evaluation_scores(score_global)').eq('campagne_id', ev.campagne_id).in('statut', ['valide', 'verrouille']);
+    if (rankError) return { success: false, error: toUserError('le calcul du rang EROF', rankError) };
+    const sorted = (ranked || []).sort((a: any, b: any) => Number(b.evaluation_scores?.[0]?.score_global || 0) - Number(a.evaluation_scores?.[0]?.score_global || 0) || a.id.localeCompare(b.id));
+    const scoreObj: any = Array.isArray((ev as any).evaluation_scores) ? (ev as any).evaluation_scores[0] : (ev as any).evaluation_scores;
+    const { error } = await supabase!.from('selections_erof').insert({ campagne_id: ev.campagne_id, evaluation_id: ev.id,
+      rang_erof: sorted.findIndex((r: any) => r.id === ev.id) + 1, score_erof: Number(scoreObj?.score_global || 0), selectionne_par: user.id });
+    return error ? { success: false, error: toUserError('la présélection du COGES', error) } : { success: true };
+  }
+
+  static async removeNiveau2Selection(selectionId: string, user: User): Promise<{ success: boolean; error?: string }> {
+    if (user.role !== 'admin_national') return { success: false, error: 'Action réservée à la DAPS-COGES.' };
+    const { error } = await supabase!.from('selections_erof').delete().eq('id', selectionId);
+    return error ? { success: false, error: toUserError('le retrait de la présélection', error) } : { success: true };
+  }
+
+  static async saveNiveau2(selectionId: string, input: Partial<EvaluationNiveau2>, user: User): Promise<{ success: boolean; error?: string }> {
+    const payload: any = { ...input, selection_erof_id: selectionId, saisi_par: user.id };
+    for (const key of ['id','created_at','updated_at','score_total','niveau_priorite','score_prescolaire','score_effectif_prescolaire','score_distance_iepp','score_acces_coges','score_distance_sante','score_acces_sante']) delete payload[key];
+    if (payload.statut === 'valide') payload.valide_par = user.id;
+    const { error } = await supabase!.from('evaluations_niveau_2').upsert(payload, { onConflict: 'selection_erof_id' });
+    return error ? { success: false, error: toUserError('l’enregistrement de la grille de niveau 2', error) } : { success: true };
+  }
 }
 
 // UNIFIED EXPORT SERVICE (DATA ROUTER)
@@ -2388,5 +2484,29 @@ export class DataService {
       return await SupabaseDataService.resetUserPassword(id, newPassword);
     }
     return await LocalDemoService.resetUserPassword(id, newPassword);
+  }
+
+  static async getNiveau2Selections(user: User, campagneId?: string): Promise<SelectionErof[]> {
+    return isSupabaseConfigured
+      ? SupabaseDataService.getNiveau2Selections(user, campagneId)
+      : LocalDemoService.getNiveau2Selections(user, campagneId);
+  }
+
+  static async addNiveau2Selection(evaluationId: string, user: User): Promise<{ success: boolean; error?: string }> {
+    return isSupabaseConfigured
+      ? SupabaseDataService.addNiveau2Selection(evaluationId, user)
+      : LocalDemoService.addNiveau2Selection(evaluationId, user);
+  }
+
+  static async removeNiveau2Selection(selectionId: string, user: User): Promise<{ success: boolean; error?: string }> {
+    return isSupabaseConfigured
+      ? SupabaseDataService.removeNiveau2Selection(selectionId, user)
+      : LocalDemoService.removeNiveau2Selection(selectionId, user);
+  }
+
+  static async saveNiveau2(selectionId: string, input: Partial<EvaluationNiveau2>, user: User): Promise<{ success: boolean; error?: string }> {
+    return isSupabaseConfigured
+      ? SupabaseDataService.saveNiveau2(selectionId, input, user)
+      : LocalDemoService.saveNiveau2(selectionId, input, user);
   }
 }

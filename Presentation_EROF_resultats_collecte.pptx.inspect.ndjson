@@ -1,0 +1,193 @@
+{"kind":"deck","id":"pr/dhcgxy","name":"Deck"}
+{"kind":"layout","layoutId":"60d99231-216d-4a77-a325-a282684d5029","name":"Master","type":"master"}
+{"kind":"layout","layoutId":"9737095a-731e-41fd-9fe0-0b847b269306","name":"Title Slide","type":"title"}
+{"kind":"slide","id":"sl/y10acj","slide":1,"title":"COMMUNICATION DES RÉSULTATS · COLLECTE EROF 2026","textShapes":5}
+{"kind":"shape","id":"sh/618va18b","slide":1,"name":"gold-band","bbox":[0,0,18,720]}
+{"kind":"textbox","id":"sh/t4ze5g7m","slide":1,"name":"eyebrow","text":"COMMUNICATION DES RÉSULTATS · COLLECTE EROF 2026","textPreview":"COMMUNICATION DES RÉSULTATS · COLLECTE EROF 2026","textChars":48,"textLines":1,"bbox":[62,58,1080,32]}
+{"kind":"textbox","id":"sh/83qdcbqh","slide":1,"name":"main-title","text":"Évaluation du fonctionnement des COGES","textPreview":"Évaluation du fonctionnement des COGES","textChars":38,"textLines":1,"bbox":[62,190,1080,190]}
+{"kind":"textbox","id":"sh/jehcz6pk","slide":1,"name":"subtitle","text":"Présentation du formulaire et premiers enseignements de la collecte","textPreview":"Présentation du formulaire et premiers enseignements de la collecte","textChars":67,"textLines":1,"bbox":[62,408,850,72]}
+{"kind":"textbox","id":"sh/ydov618z","slide":1,"name":"scope","text":"204 COGES · 12 DRENA · Base arrêtée au 27 juillet 2026","textPreview":"204 COGES · 12 DRENA · Base arrêtée au 27 juillet 2026","textChars":54,"textLines":1,"bbox":[62,594,980,34]}
+{"kind":"textbox","id":"sh/l0zu1w7q","slide":1,"name":"page","text":"01","textPreview":"01","textChars":2,"textLines":1,"bbox":[1175,674,48,22]}
+{"kind":"notes","id":"nt/y10acj","slide":1,"text":"Présenter l’objectif : expliquer l’outil, partager les résultats consolidés et ouvrir la discussion sur les priorités d’appui.\n\n[Sources]\n- Base brute EROF du 27/07/2026\n- Formulaire EROF, version fournie par l’utilisateur"}
+{"kind":"slide","id":"sl/k6tu7l","slide":2,"title":"1 · L’OUTIL D’ÉVALUATION","textShapes":11}
+{"kind":"textbox","id":"sh/lwnqpkve","slide":2,"name":"kicker","text":"1 · L’OUTIL D’ÉVALUATION","textPreview":"1 · L’OUTIL D’ÉVALUATION","textChars":24,"textLines":1,"bbox":[56,34,900,24]}
+{"kind":"textbox","id":"sh/ytc7epwn","slide":2,"name":"title","text":" Un formulaire structuré pour relier gouvernance, pratiques et preuves","textPreview":"Un formulaire structuré pour relier gouvernance, pratiques et preuves","textChars":70,"textLines":1,"bbox":[56,65,1160,82]}
+{"kind":"shape","id":"sh/zu58nax8","slide":2,"name":"title-rule","bbox":[56,154,1168,3]}
+{"kind":"textbox","id":"sh/crupcfex","slide":2,"name":"page","text":"02","textPreview":"02","textChars":2,"textLines":1,"bbox":[1175,674,48,22]}
+{"kind":"textbox","id":"sh/q5c7a5wr","slide":2,"name":"form-count","text":"20","textPreview":"20","textChars":2,"textLines":1,"bbox":[500,178,155,80]}
+{"kind":"textbox","id":"sh/b6l8jaxc","slide":2,"name":"form-count-label","text":"sections thématiques","textPreview":"sections thématiques","textChars":20,"textLines":1,"bbox":[500,255,220,40]}
+{"kind":"textbox","id":"sh/wny9oze1","slide":2,"name":"form-pages","text":"25","textPreview":"25","textChars":2,"textLines":1,"bbox":[500,330,155,80]}
+{"kind":"textbox","id":"sh/ho7qx4vm","slide":2,"name":"form-pages-label","text":"pages de collecte","textPreview":"pages de collecte","textChars":17,"textLines":1,"bbox":[500,407,220,40]}
+{"kind":"textbox","id":"sh/h0vuhgz6","slide":2,"name":"form-scale","text":"1 → 5","textPreview":"1 → 5","textChars":5,"textLines":1,"bbox":[500,480,190,80]}
+{"kind":"textbox","id":"sh/gzmd8by1","slide":2,"name":"form-scale-label","text":"échelle commune de notation","textPreview":"échelle commune de notation","textChars":27,"textLines":1,"bbox":[500,557,255,48]}
+{"kind":"textbox","id":"sh/fydcfqhg","slide":2,"name":"form-logic","text":"Le dispositif combine identification, fonctionnement des organes, gestion financière, planification, partenariats, inclusion et contrôle des pièces justificatives.","textPreview":"Le dispositif combine identification, fonctionnement des organes, gestion financière, planification, partenariats, inclusion et contrôle ...","textChars":163,"textLines":1,"bbox":[790,195,390,220]}
+{"kind":"shape","id":"sh/ux4v6lgv","slide":2,"name":"logic-line","bbox":[790,445,330,4]}
+{"kind":"textbox","id":"sh/twvudgza","slide":2,"name":"form-message","text":"La force de l’outil : confronter la perception déclarée aux preuves effectivement disponibles.","textPreview":"La force de l’outil : confronter la perception déclarée aux preuves effectivement disponibles.","textChars":94,"textLines":1,"bbox":[790,472,390,120]}
+{"kind":"image","id":"im/8rylkvup","slide":2,"name":"","alt":"Page du formulaire EROF montrant les rubriques de gouvernance","bbox":[60,170,390,475]}
+{"kind":"notes","id":"nt/k6tu7l","slide":2,"text":"Ne pas parcourir les 20 sections une à une. Insister sur la logique : informations générales, notation des pratiques, puis vérification documentaire.\nExpliquer que l’échelle de 1 à 5 rend les dimensions comparables.\n\n[Sources]\n- Formulaire EROF PDF fourni par l’utilisateur (25 pages)"}
+{"kind":"slide","id":"sl/16hfnd","slide":3,"title":"2 · PÉRIMÈTRE ET QUALITÉ","textShapes":12}
+{"kind":"textbox","id":"sh/zqd4j6x4","slide":3,"name":"kicker","text":"2 · PÉRIMÈTRE ET QUALITÉ","textPreview":"2 · PÉRIMÈTRE ET QUALITÉ","textChars":24,"textLines":1,"bbox":[56,34,900,24]}
+{"kind":"textbox","id":"sh/0rmlcbyp","slide":3,"name":"title","text":" Une collecte large, équilibrée entre milieu urbain et rural","textPreview":"Une collecte large, équilibrée entre milieu urbain et rural","textChars":60,"textLines":1,"bbox":[56,65,1160,82]}
+{"kind":"shape","id":"sh/1svmlwfa","slide":3,"name":"title-rule","bbox":[56,154,1168,3]}
+{"kind":"textbox","id":"sh/q1k36hgn","slide":3,"name":"page","text":"03","textPreview":"03","textChars":2,"textLines":1,"bbox":[1175,674,48,22]}
+{"kind":"shape","id":"sh/r2t4fmx8","slide":3,"name":"stat-bg-évaluations enregistrées","bbox":[56,180,350,210]}
+{"kind":"shape","id":"sh/cn2l8ryt","slide":3,"name":"stat-accent-évaluations enregistrées","bbox":[56,180,8,210]}
+{"kind":"textbox","id":"sh/dovmhwfy","slide":3,"name":"stat-value-évaluations enregistrées","text":"204","textPreview":"204","textChars":3,"textLines":1,"bbox":[84,208,305,72]}
+{"kind":"textbox","id":"sh/2xk32hgb","slide":3,"name":"stat-label-évaluations enregistrées","text":"évaluations enregistrées","textPreview":"évaluations enregistrées","textChars":24,"textLines":1,"bbox":[84,285,305,90]}
+{"kind":"shape","id":"sh/3yt4bmxw","slide":3,"name":"stat-bg-évaluations validées","bbox":[465,180,350,210]}
+{"kind":"shape","id":"sh/ru5sbmd0","slide":3,"name":"stat-accent-évaluations validées","bbox":[465,180,8,210]}
+{"kind":"textbox","id":"sh/6twr2hcf","slide":3,"name":"stat-value-évaluations validées","text":"185","textPreview":"185","textChars":3,"textLines":1,"bbox":[493,208,305,72]}
+{"kind":"textbox","id":"sh/twnadcv6","slide":3,"name":"stat-label-évaluations validées","text":"évaluations validées","textPreview":"évaluations validées","textChars":20,"textLines":1,"bbox":[493,285,305,90]}
+{"kind":"shape","id":"sh/sve947ul","slide":3,"name":"stat-bg-DRENA couvertes","bbox":[874,180,350,210]}
+{"kind":"shape","id":"sh/fi5sfmdw","slide":3,"name":"stat-accent-DRENA couvertes","bbox":[874,180,8,210]}
+{"kind":"textbox","id":"sh/exwr6hcb","slide":3,"name":"stat-value-DRENA couvertes","text":"12","textPreview":"12","textChars":2,"textLines":1,"bbox":[902,208,305,72]}
+{"kind":"textbox","id":"sh/1knahwv2","slide":3,"name":"stat-label-DRENA couvertes","text":"DRENA couvertes","textPreview":"DRENA couvertes","textChars":15,"textLines":1,"bbox":[902,285,305,90]}
+{"kind":"textbox","id":"sh/gje98ruh","slide":3,"name":"coverage","text":"Répartition du milieu de collecte","textPreview":"Répartition du milieu de collecte","textChars":33,"textLines":1,"bbox":[56,455,480,36]}
+{"kind":"textbox","id":"sh/u1sruxc7","slide":3,"name":"valid-rate","text":"91 %","textPreview":"91 %","textChars":4,"textLines":1,"bbox":[835,470,260,80]}
+{"kind":"textbox","id":"sh/ytk3yp07","slide":3,"name":"valid-copy","text":"des évaluations sont validées\n19 brouillons restent à finaliser","textPreview":"des évaluations sont validées | 19 brouillons restent à finaliser","textChars":63,"textLines":2,"bbox":[790,555,350,70]}
+{"kind":"chart","id":"ch/bylg3qlw","slide":3,"name":"","chartType":"bar","bbox":[55,495,650,165]}
+{"kind":"notes","id":"nt/16hfnd","slide":3,"text":"Souligner la couverture géographique : les 12 DRENA comptent chacune 15 à 20 saisies.\nPréciser que les analyses de score portent sur les 185 dossiers validés.\n\n[Sources]\n- Base brute EROF du 27/07/2026, onglet « Base brute »"}
+{"kind":"slide","id":"sl/63bzof","slide":4,"title":"3 · RÉSULTAT GLOBAL","textShapes":8}
+{"kind":"textbox","id":"sh/orqhkbi1","slide":4,"name":"kicker","text":"3 · RÉSULTAT GLOBAL","textPreview":"3 · RÉSULTAT GLOBAL","textChars":19,"textLines":1,"bbox":[56,34,900,24]}
+{"kind":"textbox","id":"sh/3qhgr6hg","slide":4,"name":"title","text":" Le niveau moyen est fonctionnel, mais la maturité reste hétérogène","textPreview":"Le niveau moyen est fonctionnel, mais la maturité reste hétérogène","textChars":67,"textLines":1,"bbox":[56,65,1160,82]}
+{"kind":"shape","id":"sh/258zi10b","slide":4,"name":"title-rule","bbox":[56,154,1168,3]}
+{"kind":"textbox","id":"sh/dwjixgzy","slide":4,"name":"page","text":"04","textPreview":"04","textChars":2,"textLines":1,"bbox":[1175,674,48,22]}
+{"kind":"textbox","id":"sh/cvahobid","slide":4,"name":"mean","text":"3,52 / 5","textPreview":"3,52 / 5","textChars":8,"textLines":1,"bbox":[65,185,405,100]}
+{"kind":"textbox","id":"sh/bu10v6hs","slide":4,"name":"median","text":"Médiane : 3,62 · Étendue : 1,93 à 4,78","textPreview":"Médiane : 3,62 · Étendue : 1,93 à 4,78","textChars":38,"textLines":1,"bbox":[70,292,430,42]}
+{"kind":"shape","id":"sh/t0zylwze","slide":4,"name":"takeaway","bbox":[65,405,375,160]}
+{"kind":"textbox","id":"sh/sz6hsrit","slide":4,"name":"takeaway-text","text":"59 %","textPreview":"59 %","textChars":4,"textLines":1,"bbox":[92,430,150,62]}
+{"kind":"textbox","id":"sh/u5cfmxw3","slide":4,"name":"takeaway-copy","text":"des COGES validés sont classés « fonctionnels » ou « avancés ».","textPreview":"des COGES validés sont classés « fonctionnels » ou « avancés ».","textChars":63,"textLines":1,"bbox":[92,500,310,50]}
+{"kind":"textbox","id":"sh/v6lgvixo","slide":4,"name":"foot","text":"Base de calcul : 185 évaluations validées","textPreview":"Base de calcul : 185 évaluations validées","textChars":41,"textLines":1,"bbox":[510,575,670,30]}
+{"kind":"chart","id":"ch/a1k3mls7","slide":4,"name":"","chartType":"bar","bbox":[510,170,670,385]}
+{"kind":"notes","id":"nt/63bzof","slide":4,"text":"Présenter d’abord le score moyen, puis la distribution : le résultat central est encourageant mais 75 COGES restent sous le niveau fonctionnel.\nLes 19 brouillons sans score ne sont pas inclus.\n\n[Sources]\n- Base brute EROF du 27/07/2026, colonnes « Score global » et « Classification »"}
+{"kind":"slide","id":"sl/5rbdqc","slide":5,"title":"3 · RÉSULTAT GLOBAL","textShapes":7}
+{"kind":"textbox","id":"sh/1o3eto7y","slide":5,"name":"kicker","text":"3 · RÉSULTAT GLOBAL","textPreview":"3 · RÉSULTAT GLOBAL","textChars":19,"textLines":1,"bbox":[56,34,900,24]}
+{"kind":"textbox","id":"sh/elcfyt8n","slide":5,"name":"title","text":" Les écarts territoriaux atteignent près d’un point sur cinq","textPreview":"Les écarts territoriaux atteignent près d’un point sur cinq","textChars":60,"textLines":1,"bbox":[56,65,1160,82]}
+{"kind":"shape","id":"sh/fmlwryps","slide":5,"name":"title-rule","bbox":[56,154,1168,3]}
+{"kind":"textbox","id":"sh/sjudwjqh","slide":5,"name":"page","text":"05","textPreview":"05","textChars":2,"textLines":1,"bbox":[1175,674,48,22]}
+{"kind":"textbox","id":"sh/6hsvu98b","slide":5,"name":"gap","text":"0,98 point","textPreview":"0,98 point","textChars":10,"textLines":1,"bbox":[900,215,260,65]}
+{"kind":"textbox","id":"sh/ri1wnepw","slide":5,"name":"gap-label","text":"sépare la moyenne la plus haute de la plus basse","textPreview":"sépare la moyenne la plus haute de la plus basse","textChars":48,"textLines":1,"bbox":[890,285,280,70]}
+{"kind":"shape","id":"sh/4fadszq5","slide":5,"name":"caution","bbox":[880,420,310,125]}
+{"kind":"textbox","id":"sh/5gjel4rq","slide":5,"name":"caution-text","text":"À approfondir","textPreview":"À approfondir","textChars":13,"textLines":1,"bbox":[908,443,250,30]}
+{"kind":"textbox","id":"sh/h83y5w3m","slide":5,"name":"caution-copy","text":"Comparer les contextes et les appuis disponibles avant d’en tirer des conclusions causales.","textPreview":"Comparer les contextes et les appuis disponibles avant d’en tirer des conclusions causales.","textChars":91,"textLines":1,"bbox":[908,482,250,52]}
+{"kind":"chart","id":"ch/l4rmpcv2","slide":5,"name":"","chartType":"bar","bbox":[55,170,780,460]}
+{"kind":"notes","id":"nt/5rbdqc","slide":5,"text":"Lire ce graphique comme un signal de ciblage, non comme un classement définitif.\nDanané, Daloa et Agboville se situent autour de 3,8 ; Odienné est à 2,81.\n\n[Sources]\n- Base brute EROF du 27/07/2026 ; moyennes calculées sur les évaluations validées par DRENA"}
+{"kind":"slide","id":"sl/w2d3rr","slide":6,"title":"4 · LECTURE PAR DIMENSION","textShapes":7}
+{"kind":"textbox","id":"sh/q5cvm187","slide":6,"name":"kicker","text":"4 · LECTURE PAR DIMENSION","textPreview":"4 · LECTURE PAR DIMENSION","textChars":25,"textLines":1,"bbox":[56,34,900,24]}
+{"kind":"textbox","id":"sh/d8nuxgri","slide":6,"name":"title","text":" La documentation est solide ; la résilience demeure le principal angle mort","textPreview":"La documentation est solide ; la résilience demeure le principal angle mort","textChars":76,"textLines":1,"bbox":[56,65,1160,82]}
+{"kind":"shape","id":"sh/s7edobqx","slide":6,"name":"title-rule","bbox":[56,154,1168,3]}
+{"kind":"textbox","id":"sh/32lcr69g","slide":6,"name":"page","text":"06","textPreview":"06","textChars":2,"textLines":1,"bbox":[1175,674,48,22]}
+{"kind":"textbox","id":"sh/543utgrm","slide":6,"name":"axis-high","text":"4,19","textPreview":"4,19","textChars":4,"textLines":1,"bbox":[920,195,210,65]}
+{"kind":"textbox","id":"sh/43udkbq1","slide":6,"name":"axis-high-l","text":"Documentation\net classement","textPreview":"Documentation | et classement","textChars":27,"textLines":2,"bbox":[920,260,210,60]}
+{"kind":"textbox","id":"sh/vy1cnm9k","slide":6,"name":"axis-low","text":"1,45","textPreview":"1,45","textChars":4,"textLines":1,"bbox":[920,405,210,65]}
+{"kind":"textbox","id":"sh/udsbeh8z","slide":6,"name":"axis-low-l","text":"Préparation\naux crises","textPreview":"Préparation | aux crises","textChars":22,"textLines":2,"bbox":[920,470,210,60]}
+{"kind":"chart","id":"ch/edcfq98r","slide":6,"name":"","chartType":"bar","bbox":[55,170,800,465]}
+{"kind":"notes","id":"nt/w2d3rr","slide":6,"text":"Mettre en évidence le contraste : les documents sont souvent présents et classés, mais peu de COGES disposent d’un mécanisme financier de réponse aux crises.\nLes dimensions sont des moyennes des questions notées de leur section.\n\n[Sources]\n- Base brute EROF du 27/07/2026, questions des sections 4 à 15"}
+{"kind":"slide","id":"sl/eikchn","slide":7,"title":"4 · POINTS FORTS","textShapes":19}
+{"kind":"textbox","id":"sh/43ypobmh","slide":7,"name":"kicker","text":"4 · POINTS FORTS","textPreview":"4 · POINTS FORTS","textChars":16,"textLines":1,"bbox":[56,34,900,24]}
+{"kind":"textbox","id":"sh/j2pof65w","slide":7,"name":"title","text":" Les acquis reposent sur l’ancrage institutionnel et les outils de base","textPreview":"Les acquis reposent sur l’ancrage institutionnel et les outils de base","textChars":71,"textLines":1,"bbox":[56,65,1160,82]}
+{"kind":"shape","id":"sh/i1g7m14b","slide":7,"name":"title-rule","bbox":[56,154,1168,3]}
+{"kind":"textbox","id":"sh/xg76dwnq","slide":7,"name":"page","text":"07","textPreview":"07","textChars":2,"textLines":1,"bbox":[1175,674,48,22]}
+{"kind":"textbox","id":"sh/wfepkbml","slide":7,"name":"rank0","text":"01","textPreview":"01","textChars":2,"textLines":1,"bbox":[60,175,55,45]}
+{"kind":"textbox","id":"sh/ve5ob650","slide":7,"name":"item0","text":"Participation du directeur aux AG","textPreview":"Participation du directeur aux AG","textChars":33,"textLines":1,"bbox":[125,175,760,45]}
+{"kind":"textbox","id":"sh/adwni14f","slide":7,"name":"score0","text":"4,98 / 5","textPreview":"4,98 / 5","textChars":8,"textLines":1,"bbox":[930,175,190,45]}
+{"kind":"shape","id":"sh/1cr6p0na","slide":7,"name":"line0","bbox":[125,231,995,1]}
+{"kind":"textbox","id":"sh/gbipwvmp","slide":7,"name":"rank1","text":"02","textPreview":"02","textChars":2,"textLines":1,"bbox":[60,263,55,45]}
+{"kind":"textbox","id":"sh/edcve5gz","slide":7,"name":"item1","text":"Carnet d’activités et de retrait","textPreview":"Carnet d’activités et de retrait","textChars":32,"textLines":1,"bbox":[125,263,760,45]}
+{"kind":"textbox","id":"sh/zelc7qhk","slide":7,"name":"score1","text":"4,81 / 5","textPreview":"4,81 / 5","textChars":8,"textLines":1,"bbox":[930,263,190,45]}
+{"kind":"shape","id":"sh/0zedgvy5","slide":7,"name":"line1","bbox":[125,319,995,1]}
+{"kind":"textbox","id":"sh/10nu90fq","slide":7,"name":"rank2","text":"03","textPreview":"03","textChars":2,"textLines":1,"bbox":[60,351,55,45]}
+{"kind":"textbox","id":"sh/q9cvalg3","slide":7,"name":"item2","text":"Plan d’action communautaire","textPreview":"Plan d’action communautaire","textChars":27,"textLines":1,"bbox":[125,351,760,45]}
+{"kind":"textbox","id":"sh/ralc3qho","slide":7,"name":"score2","text":"4,67 / 5","textPreview":"4,67 / 5","textChars":8,"textLines":1,"bbox":[930,351,190,45]}
+{"kind":"shape","id":"sh/cbudcvy9","slide":7,"name":"line2","bbox":[125,407,995,1]}
+{"kind":"textbox","id":"sh/dc3u50ze","slide":7,"name":"rank3","text":"04","textPreview":"04","textChars":2,"textLines":1,"bbox":[60,439,55,45]}
+{"kind":"textbox","id":"sh/a5wvmpg7","slide":7,"name":"item3","text":"Respect des mandats","textPreview":"Respect des mandats","textChars":19,"textLines":1,"bbox":[125,439,760,45]}
+{"kind":"textbox","id":"sh/b65wfuxs","slide":7,"name":"score3","text":"4,59 / 5","textPreview":"4,59 / 5","textChars":8,"textLines":1,"bbox":[930,439,190,45]}
+{"kind":"shape","id":"sh/7ahs7mx4","slide":7,"name":"line3","bbox":[125,495,995,1]}
+{"kind":"textbox","id":"sh/698ryhwj","slide":7,"name":"rank4","text":"05","textPreview":"05","textChars":2,"textLines":1,"bbox":[60,527,55,45]}
+{"kind":"textbox","id":"sh/tcza9cfa","slide":7,"name":"item4","text":"Élection démocratique du bureau","textPreview":"Élection démocratique du bureau","textChars":31,"textLines":1,"bbox":[125,527,760,45]}
+{"kind":"textbox","id":"sh/sbq907ep","slide":7,"name":"score4","text":"4,47 / 5","textPreview":"4,47 / 5","textChars":8,"textLines":1,"bbox":[930,527,190,45]}
+{"kind":"shape","id":"sh/fehsbmxg","slide":7,"name":"line4","bbox":[125,583,995,1]}
+{"kind":"textbox","id":"sh/ud8r2hwv","slide":7,"name":"meaning","text":"Ces acquis constituent un socle à préserver : légitimité du bureau, implication de la direction et outils de planification.","textPreview":"Ces acquis constituent un socle à préserver : légitimité du bureau, implication de la direction et outils de planification.","textChars":123,"textLines":1,"bbox":[770,605,350,46]}
+{"kind":"notes","id":"nt/eikchn","slide":7,"text":"Donner deux exemples concrets : participation quasi systématique du directeur et forte présence du PACC.\nRappeler qu’un bon score déclaré doit être rapproché de la disponibilité des pièces justificatives.\n\n[Sources]\n- Base brute EROF du 27/07/2026 ; moyennes des questions notées"}
+{"kind":"slide","id":"sl/tpw372","slide":8,"title":"4 · POINTS DE VIGILANCE","textShapes":13}
+{"kind":"textbox","id":"sh/z25sny54","slide":8,"name":"kicker","text":"4 · POINTS DE VIGILANCE","textPreview":"4 · POINTS DE VIGILANCE","textChars":23,"textLines":1,"bbox":[56,34,900,24]}
+{"kind":"textbox","id":"sh/03e9w3mp","slide":8,"name":"title","text":" Cinq fragilités concentrent l’essentiel du risque opérationnel","textPreview":"Cinq fragilités concentrent l’essentiel du risque opérationnel","textChars":63,"textLines":1,"bbox":[56,65,1160,82]}
+{"kind":"shape","id":"sh/14nap8nu","slide":8,"name":"title-rule","bbox":[56,154,1168,3]}
+{"kind":"textbox","id":"sh/qdcrq9o7","slide":8,"name":"page","text":"08","textPreview":"08","textChars":2,"textLines":1,"bbox":[1175,674,48,22]}
+{"kind":"shape","id":"sh/relsje5s","slide":8,"name":"weak-bg0","bbox":[55,175,1120,92]}
+{"kind":"textbox","id":"sh/cfu9sj6d","slide":8,"name":"weak-score0","text":"1,20","textPreview":"1,20","textChars":4,"textLines":1,"bbox":[79,190,120,50]}
+{"kind":"textbox","id":"sh/dg3alony","slide":8,"name":"weak-label0","text":"Activités génératrices de revenus","textPreview":"Activités génératrices de revenus","textChars":33,"textLines":1,"bbox":[220,195,930,52]}
+{"kind":"shape","id":"sh/29srm9ob","slide":8,"name":"weak-bg1","bbox":[55,300,1120,92]}
+{"kind":"textbox","id":"sh/3a18fe5w","slide":8,"name":"weak-score1","text":"1,45","textPreview":"1,45","textChars":4,"textLines":1,"bbox":[79,315,120,50]}
+{"kind":"textbox","id":"sh/7254vqt0","slide":8,"name":"weak-label1","text":"Fonds d’urgence et réponse aux crises","textPreview":"Fonds d’urgence et réponse aux crises","textChars":37,"textLines":1,"bbox":[220,320,930,52]}
+{"kind":"shape","id":"sh/m1c3mlcf","slide":8,"name":"weak-bg2","bbox":[55,425,1120,92]}
+{"kind":"textbox","id":"sh/9onmxgb6","slide":8,"name":"weak-score2","text":"1,98","textPreview":"1,98","textChars":4,"textLines":1,"bbox":[79,440,120,50]}
+{"kind":"textbox","id":"sh/83elobal","slide":8,"name":"weak-label2","text":"Participation des élèves au bureau","textPreview":"Participation des élèves au bureau","textChars":34,"textLines":1,"bbox":[220,445,930,52]}
+{"kind":"shape","id":"sh/vq54zqtc","slide":8,"name":"weak-bg3","bbox":[435,545,350,90]}
+{"kind":"textbox","id":"sh/upw3qlsr","slide":8,"name":"weak-score3","text":"2,11","textPreview":"2,11","textChars":4,"textLines":1,"bbox":[459,560,120,50]}
+{"kind":"textbox","id":"sh/hsnm10b2","slide":8,"name":"weak-label3","text":"Disponibilité du règlement intérieur","textPreview":"Disponibilité du règlement intérieur","textChars":36,"textLines":1,"bbox":[600,565,160,52]}
+{"kind":"shape","id":"sh/wrelsvah","slide":8,"name":"weak-bg4","bbox":[825,545,350,90]}
+{"kind":"textbox","id":"sh/bu14n6ts","slide":8,"name":"weak-score4","text":"2,59","textPreview":"2,59","textChars":4,"textLines":1,"bbox":[849,560,120,50]}
+{"kind":"textbox","id":"sh/ats3e1c7","slide":8,"name":"weak-label4","text":"Collaboration avec collectivités et ONG","textPreview":"Collaboration avec collectivités et ONG","textChars":39,"textLines":1,"bbox":[990,565,160,52]}
+{"kind":"notes","id":"nt/tpw372","slide":8,"text":"Ces scores donnent une base simple pour prioriser les appuis.\nInsister sur la combinaison financement, résilience et ouverture aux partenaires.\n\n[Sources]\n- Base brute EROF du 27/07/2026 ; cinq plus faibles moyennes de questions"}
+{"kind":"slide","id":"sl/22kkrv","slide":9,"title":"5 · CONTRÔLE DOCUMENTAIRE","textShapes":7}
+{"kind":"textbox","id":"sh/kziporep","slide":9,"name":"kicker","text":"5 · CONTRÔLE DOCUMENTAIRE","textPreview":"5 · CONTRÔLE DOCUMENTAIRE","textChars":25,"textLines":1,"bbox":[56,34,900,24]}
+{"kind":"textbox","id":"sh/je9ovmx4","slide":9,"name":"title","text":" La preuve documentaire confirme les forces… et révèle les écarts","textPreview":"La preuve documentaire confirme les forces… et révèle les écarts","textChars":65,"textLines":1,"bbox":[56,65,1160,82]}
+{"kind":"shape","id":"sh/yd07mhwj","slide":9,"name":"title-rule","bbox":[56,154,1168,3]}
+{"kind":"textbox","id":"sh/xcr6tcfy","slide":9,"name":"page","text":"09","textPreview":"09","textChars":2,"textLines":1,"bbox":[1175,674,48,22]}
+{"kind":"textbox","id":"sh/ba9or2x8","slide":9,"name":"proof-rate","text":"48,5 %","textPreview":"48,5 %","textChars":6,"textLines":1,"bbox":[850,190,290,70]}
+{"kind":"textbox","id":"sh/a90nixwn","slide":9,"name":"proof-label","text":"des 4 080 pièces attendues sont disponibles","textPreview":"des 4 080 pièces attendues sont disponibles","textChars":43,"textLines":1,"bbox":[825,265,340,70]}
+{"kind":"shape","id":"sh/p876psf2","slide":9,"name":"proof-alert","bbox":[820,405,360,155]}
+{"kind":"textbox","id":"sh/o7y5g7eh","slide":9,"name":"proof-alert-title","text":"Pièces les plus rares","textPreview":"Pièces les plus rares","textChars":21,"textLines":1,"bbox":[850,428,300,30]}
+{"kind":"textbox","id":"sh/ahor6xwz","slide":9,"name":"proof-alert-copy","text":"Documents AGR : 1 %\nProtection / santé : 12 %\nRèglement intérieur : 26 %","textPreview":"Documents AGR : 1 % | Protection / santé : 12 % | Règlement intérieur : 26 %","textChars":72,"textLines":3,"bbox":[850,470,300,75]}
+{"kind":"chart","id":"ch/kfmdsrm9","slide":9,"name":"","chartType":"bar","bbox":[55,175,700,420]}
+{"kind":"notes","id":"nt/22kkrv","slide":9,"text":"Expliquer que « disponible » regroupe les pièces consultées et non consultées.\nLa disponibilité globale est de 1 977 pièces sur 4 080 attendues.\n\n[Sources]\n- Base brute EROF du 27/07/2026, onglet « Preuves documentaires »"}
+{"kind":"slide","id":"sl/yzgszk","slide":10,"title":"5 · CAPACITÉS DES BUREAUX","textShapes":11}
+{"kind":"textbox","id":"sh/83e90bil","slide":10,"name":"kicker","text":"5 · CAPACITÉS DES BUREAUX","textPreview":"5 · CAPACITÉS DES BUREAUX","textChars":25,"textLines":1,"bbox":[56,34,900,24]}
+{"kind":"textbox","id":"sh/n258r610","slide":10,"name":"title","text":" Les bureaux sont presque paritaires, mais la professionnalisation reste à renforcer","textPreview":"Les bureaux sont presque paritaires, mais la professionnalisation reste à renforcer","textChars":84,"textLines":1,"bbox":[56,65,1160,82]}
+{"kind":"shape","id":"sh/m1wry10f","slide":10,"name":"title-rule","bbox":[56,154,1168,3]}
+{"kind":"textbox","id":"sh/l0nqpwju","slide":10,"name":"page","text":"10","textPreview":"10","textChars":2,"textLines":1,"bbox":[1175,674,48,22]}
+{"kind":"shape","id":"sh/0ze9wrip","slide":10,"name":"stat-bg-de femmes parmi 2 244 membres","bbox":[55,180,340,205]}
+{"kind":"shape","id":"sh/zy58nm14","slide":10,"name":"stat-accent-de femmes parmi 2 244 membres","bbox":[55,180,8,205]}
+{"kind":"textbox","id":"sh/yxc7u10j","slide":10,"name":"stat-value-de femmes parmi 2 244 membres","text":"46 %","textPreview":"46 %","textChars":4,"textLines":1,"bbox":[83,208,295,72]}
+{"kind":"textbox","id":"sh/dw3qlwjy","slide":10,"name":"stat-label-de femmes parmi 2 244 membres","text":"de femmes parmi 2 244 membres","textPreview":"de femmes parmi 2 244 membres","textChars":29,"textLines":1,"bbox":[83,285,295,85]}
+{"kind":"shape","id":"sh/cvupsrid","slide":10,"name":"stat-bg-déclarent une formation COGES","bbox":[470,180,340,205]}
+{"kind":"shape","id":"sh/qlsbatw7","slide":10,"name":"stat-accent-déclarent une formation COGES","bbox":[470,180,8,205]}
+{"kind":"textbox","id":"sh/bm1sjyxc","slide":10,"name":"stat-value-déclarent une formation COGES","text":"33 %","textPreview":"33 %","textChars":4,"textLines":1,"bbox":[498,208,295,72]}
+{"kind":"textbox","id":"sh/cnutc3ex","slide":10,"name":"stat-label-déclarent une formation COGES","text":"déclarent une formation COGES","textPreview":"déclarent une formation COGES","textChars":29,"textLines":1,"bbox":[498,285,295,85]}
+{"kind":"shape","id":"sh/d83ul8vi","slide":10,"name":"stat-bg-ont une bonne maîtrise du rôle","bbox":[885,180,340,205]}
+{"kind":"shape","id":"sh/2hsb6twv","slide":10,"name":"stat-accent-ont une bonne maîtrise du rôle","bbox":[885,180,8,205]}
+{"kind":"textbox","id":"sh/3i1sfexg","slide":10,"name":"stat-value-ont une bonne maîtrise du rôle","text":"15 %","textPreview":"15 %","textChars":4,"textLines":1,"bbox":[913,208,295,72]}
+{"kind":"textbox","id":"sh/ojat8je1","slide":10,"name":"stat-label-ont une bonne maîtrise du rôle","text":"ont une bonne maîtrise du rôle","textPreview":"ont une bonne maîtrise du rôle","textChars":30,"textLines":1,"bbox":[913,285,295,85]}
+{"kind":"textbox","id":"sh/pkjahofm","slide":10,"name":"mastery-title","text":"Maîtrise du rôle déclarée","textPreview":"Maîtrise du rôle déclarée","textChars":25,"textLines":1,"bbox":[55,455,440,35]}
+{"kind":"textbox","id":"sh/fehsbex4","slide":10,"name":"capacity-msg","text":"Le renouvellement des bureaux doit s’accompagner d’un parcours de formation ciblé sur les responsabilités et les outils de gestion.","textPreview":"Le renouvellement des bureaux doit s’accompagner d’un parcours de formation ciblé sur les responsabilités et les outils de gestion.","textChars":131,"textLines":1,"bbox":[790,478,380,140]}
+{"kind":"chart","id":"ch/qtwzmxgj","slide":10,"name":"","chartType":"bar","bbox":[55,495,650,160]}
+{"kind":"notes","id":"nt/yzgszk","slide":10,"text":"Nuancer : la parité numérique ne garantit pas la présence des femmes aux postes de décision.\nLa variable de formation est non renseignée pour une large part des membres ; présenter 33 % comme un minimum observé, pas comme une mesure exhaustive.\n\n[Sources]\n- Base brute EROF du 27/07/2026, onglet « Membres BE »"}
+{"kind":"slide","id":"sl/b1bqsh","slide":11,"title":"6 · RECOMMANDATIONS","textShapes":12}
+{"kind":"textbox","id":"sh/fq58fa9g","slide":11,"name":"kicker","text":"6 · RECOMMANDATIONS","textPreview":"6 · RECOMMANDATIONS","textChars":19,"textLines":1,"bbox":[56,34,900,24]}
+{"kind":"textbox","id":"sh/grep8fa1","slide":11,"name":"title","text":" Trois priorités transforment les constats en plan d’action","textPreview":"Trois priorités transforment les constats en plan d’action","textChars":59,"textLines":1,"bbox":[56,65,1160,82]}
+{"kind":"shape","id":"sh/hsnqhkrm","slide":11,"name":"title-rule","bbox":[56,154,1168,3]}
+{"kind":"textbox","id":"sh/2dw7aps7","slide":11,"name":"page","text":"11","textPreview":"11","textChars":2,"textLines":1,"bbox":[1175,674,48,22]}
+{"kind":"textbox","id":"sh/3ep8ju9s","slide":11,"name":"prio-num0","text":"01","textPreview":"01","textChars":2,"textLines":1,"bbox":[58,175,75,55]}
+{"kind":"textbox","id":"sh/4fypczad","slide":11,"name":"prio-title0","text":"Sécuriser la gouvernance","textPreview":"Sécuriser la gouvernance","textChars":24,"textLines":1,"bbox":[145,175,430,45]}
+{"kind":"textbox","id":"sh/pg7ql4ri","slide":11,"name":"prio-body0","text":"Mettre à disposition le règlement intérieur, actualiser les listes et systématiser les PV avec présence.","textPreview":"Mettre à disposition le règlement intérieur, actualiser les listes et systématiser les PV avec présence.","textChars":104,"textLines":1,"bbox":[590,175,590,75]}
+{"kind":"shape","id":"sh/qhgre983","slide":11,"name":"prio-line0","bbox":[145,285,1035,1]}
+{"kind":"textbox","id":"sh/rip8nu9o","slide":11,"name":"prio-num1","text":"02","textPreview":"02","textChars":2,"textLines":1,"bbox":[58,325,75,55]}
+{"kind":"textbox","id":"sh/zitcnalc","slide":11,"name":"prio-title1","text":"Renforcer l’autonomie financière","textPreview":"Renforcer l’autonomie financière","textChars":32,"textLines":1,"bbox":[145,325,430,45]}
+{"kind":"textbox","id":"sh/yh0ve54r","slide":11,"name":"prio-body1","text":"Accompagner les AGR, les journaux comptables et la constitution progressive d’un fonds d’urgence.","textPreview":"Accompagner les AGR, les journaux comptables et la constitution progressive d’un fonds d’urgence.","textChars":97,"textLines":1,"bbox":[590,325,590,75]}
+{"kind":"shape","id":"sh/l4bupk3i","slide":11,"name":"prio-line1","bbox":[145,435,1035,1]}
+{"kind":"textbox","id":"sh/0j2dgfmx","slide":11,"name":"prio-num2","text":"03","textPreview":"03","textChars":2,"textLines":1,"bbox":[58,475,75,55]}
+{"kind":"textbox","id":"sh/be9cjalg","slide":11,"name":"prio-title2","text":"Professionnaliser et ouvrir","textPreview":"Professionnaliser et ouvrir","textChars":27,"textLines":1,"bbox":[145,475,430,45]}
+{"kind":"textbox","id":"sh/qd0ba54v","slide":11,"name":"prio-body2","text":"Former les membres sur leurs rôles et renforcer les liens avec collectivités, ONG et autres COGES.","textPreview":"Former les membres sur leurs rôles et renforcer les liens avec collectivités, ONG et autres COGES.","textChars":98,"textLines":1,"bbox":[590,475,590,75]}
+{"kind":"shape","id":"sh/dgrul036","slide":11,"name":"prio-line2","bbox":[145,585,1035,1]}
+{"kind":"notes","id":"nt/b1bqsh","slide":11,"text":"Présenter ces priorités comme une proposition de discussion.\nPour chaque priorité, demander qui porte l’action, avec quel calendrier et quel indicateur de suivi.\n\n[Sources]\n- Synthèse analytique fondée sur la base brute EROF du 27/07/2026"}
+{"kind":"slide","id":"sl/j7o79e","slide":12,"title":"MESSAGE CLÉ","textShapes":5}
+{"kind":"shape","id":"sh/zul47qdc","slide":12,"name":"gold-band","bbox":[0,0,18,720]}
+{"kind":"textbox","id":"sh/0vu5gvex","slide":12,"name":"close-kicker","text":"MESSAGE CLÉ","textPreview":"MESSAGE CLÉ","textChars":11,"textLines":1,"bbox":[62,62,350,30]}
+{"kind":"textbox","id":"sh/lw3m90vi","slide":12,"name":"close-title","text":"Passer du diagnostic à un accompagnement différencié","textPreview":"Passer du diagnostic à un accompagnement différencié","textChars":52,"textLines":1,"bbox":[62,175,1050,120]}
+{"kind":"textbox","id":"sh/mxcni5w3","slide":12,"name":"close-copy","text":"La collecte montre un socle institutionnel réel. Le prochain enjeu est de cibler les COGES et les dimensions les plus fragiles, puis de suivre la disponibilité effective des preuves.","textPreview":"La collecte montre un socle institutionnel réel. Le prochain enjeu est de cibler les COGES et les dimensions les plus fragiles, puis de s...","textChars":182,"textLines":1,"bbox":[62,335,1020,120]}
+{"kind":"shape","id":"sh/nyl4bqdo","slide":12,"name":"close-rule","bbox":[62,530,1060,3]}
+{"kind":"textbox","id":"sh/8zu5kvet","slide":12,"name":"close-question","text":"Quelles actions pouvons-nous engager en priorité dès le prochain trimestre ?","textPreview":"Quelles actions pouvons-nous engager en priorité dès le prochain trimestre ?","textChars":76,"textLines":1,"bbox":[62,565,1050,55]}
+{"kind":"textbox","id":"sh/903md0ve","slide":12,"name":"page","text":"12","textPreview":"12","textChars":2,"textLines":1,"bbox":[1175,674,48,22]}
+{"kind":"notes","id":"nt/j7o79e","slide":12,"text":"Conclure en revenant à la finalité : utiliser les résultats pour décider, accompagner et suivre.\nOuvrir les échanges sur les trois priorités proposées.\n\n[Sources]\n- Synthèse analytique fondée sur le formulaire et la base brute EROF fournis"}

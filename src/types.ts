@@ -150,6 +150,55 @@ export interface EvaluationScore {
   score_axe12: number; // Formation et capacités
 }
 
+export type Niveau2Status = 'brouillon' | 'soumis' | 'valide';
+export type AccessDifficulty = 'facile' | 'moyennement_difficile' | 'difficile' | 'tres_difficile';
+
+export interface SelectionErof {
+  id: string;
+  campagne_id: string;
+  evaluation_id: string;
+  rang_erof: number;
+  score_erof: number;
+  selectionne_par?: string;
+  selectionne_le?: string;
+  created_at?: string;
+  evaluation?: Evaluation & {
+    etablissement_nom?: string;
+    drena_nom?: string;
+    iepp_nom?: string;
+  };
+  niveau2?: EvaluationNiveau2 | null;
+}
+
+export interface EvaluationNiveau2 {
+  id: string;
+  selection_erof_id: string;
+  effectif_coges?: number | null;
+  existence_prescolaire: boolean;
+  effectif_prescolaire: number;
+  distance_iepp_km: number;
+  difficulte_acces: AccessDifficulty;
+  justification_acces?: string | null;
+  distance_centre_sante_km: number;
+  difficulte_acces_sante: AccessDifficulty;
+  justification_acces_sante?: string | null;
+  score_prescolaire: number;
+  score_effectif_prescolaire: number;
+  score_distance_iepp: number;
+  score_acces_coges: number;
+  score_distance_sante: number;
+  score_acces_sante: number;
+  score_total: number;
+  niveau_priorite: string;
+  statut: Niveau2Status;
+  commentaire_selection?: string | null;
+  saisi_par?: string | null;
+  valide_par?: string | null;
+  validated_at?: string | null;
+  created_at?: string;
+  updated_at?: string;
+}
+
 export interface PreuveDocumentaire {
   id: string;
   evaluation_id: string;

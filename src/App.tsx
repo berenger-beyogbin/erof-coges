@@ -10,6 +10,7 @@ import Login from './components/Login';
 import CampagneManager from './components/CampagneManager';
 import UserManager from './components/UserManager';
 import AdminStatistics from './components/AdminStatistics';
+import Niveau2Selection from './components/Niveau2Selection';
 import { DataService, SupabaseDataService } from './data/dataService';
 import { User, AuditLog } from './types';
 import { supabase, isSupabaseConfigured } from './supabaseClient';
@@ -27,12 +28,13 @@ import {
   Server,
   CalendarRange,
   BarChart3
+  ,Award
 } from 'lucide-react';
 
 export default function App() {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [authInitialized, setAuthInitialized] = useState(false);
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'bilan' | 'campagnes' | 'utilisateurs' | 'logs' | 'about'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'niveau2' | 'bilan' | 'campagnes' | 'utilisateurs' | 'logs' | 'about'>('dashboard');
   const [activeView, setActiveView] = useState<'list' | 'form'>('list');
   const [editingEvalId, setEditingEvalId] = useState<string | null>(null);
   
@@ -284,6 +286,18 @@ export default function App() {
               </button>
             )}
 
+            {currentUser.role !== 'lecteur' && (
+              <button
+                onClick={() => { setActiveTab('niveau2'); setActiveView('list'); }}
+                className={`flex items-center space-x-2 px-3.5 py-2 rounded-lg text-xs font-bold transition-all border ${
+                  activeTab === 'niveau2' ? 'bg-amber-500 text-slate-950 border-amber-400' : 'text-slate-400 border-transparent hover:bg-slate-800/40 hover:text-white'
+                }`}
+              >
+                <Award className="h-4 w-4" />
+                <span>Sélection niveau 2</span>
+              </button>
+            )}
+
             {currentUser.role === 'admin_national' && (
               <button
                 onClick={() => setActiveTab('campagnes')}
@@ -371,6 +385,10 @@ export default function App() {
         {/* National statistics tab panel */}
         {activeTab === 'bilan' && currentUser.role === 'admin_national' && (
           <AdminStatistics currentUser={currentUser} />
+        )}
+
+        {activeTab === 'niveau2' && currentUser.role !== 'lecteur' && (
+          <Niveau2Selection currentUser={currentUser} />
         )}
 
         {/* Campaign management tab panel */}
