@@ -1,8 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Award, Edit, Plus, RefreshCw, Trash2 } from 'lucide-react';
+import { Award, Copy, Edit, Link2, Plus, RefreshCw, Trash2 } from 'lucide-react';
 import { DataService, formatUserFacingError } from '../data/dataService';
 import { AccessDifficulty, Campagne, Evaluation, EvaluationNiveau2, SelectionErof, User } from '../types';
 import { needsAccessJustification } from '../niveau2Scoring';
+import { supabase } from '../supabaseClient';
 
 const emptyForm: Partial<EvaluationNiveau2> = {
   effectif_coges: null, existence_prescolaire: false, effectif_prescolaire: 0,
@@ -18,7 +19,7 @@ const difficultyOptions: { value: AccessDifficulty; label: string }[] = [
   { value: 'tres_difficile', label: 'Très difficile' }
 ];
 
-export default function Niveau2Selection({ currentUser }: { currentUser: User }) {
+export default function Niveau2Selection({ currentUser, publicToken }: { currentUser: User; publicToken?: string }) {
   const [campagnes, setCampagnes] = useState<Campagne[]>([]);
   const [campagneId, setCampagneId] = useState('');
   const [selections, setSelections] = useState<SelectionErof[]>([]);
@@ -31,10 +32,27 @@ export default function Niveau2Selection({ currentUser }: { currentUser: User })
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [actionMessage, setActionMessage] = useState('');
+  const [generatedLink, setGeneratedLink] = useState('');
 
   const load = async (preferredCampaign?: string) => {
     setLoading(true); setError('');
     try {
+      if (publicToken) {
+        const { data, error: rpcError } = await supabase!.rpc('niveau2_public_context', { p_token: publicToken });
+        if (rpcError) throw rpcError;
+        const context: any = data;
+        const publicEvaluations = (context?.evaluations || []).map((row: any) => ({
+          id: row.id, campagne_id: row.campagne_id, statut: 'valide', effectif_total: row.effectif_total,
+          etablissement_nom: row.etablissement_nom, drena_nom: row.drena_nom, iepp_nom: row.iepp_nom,
+          score_global: row.score_erof
+        }));
+        const publicSelections: SelectionErof[] = (context?.evaluations || []).filter((row: any) => row.selection_id).map((row: any) => ({
+          id: row.selection_id, campagne_id: row.campagne_id, evaluation_id: row.id, rang_erof: 0,
+          score_erof: row.score_erof, evaluation: publicEvaluations.find((ev: any) => ev.id === row.id), niveau2: row.niveau2
+        }));
+        setCampagnes(context?.campagne ? [context.campagne] : []); setCampagneId(context?.campagne?.id || '');
+        setEligible(publicEvaluations); setSelections(publicSelections); setLoading(false); return;
+      }
       const [campaignRows, evaluationRows] = await Promise.all([DataService.getCampagnes(), DataService.getEvaluations(currentUser)]);
       const target = preferredCampaign || campagneId || campaignRows.find(c => c.statut === 'ouverte')?.id || campaignRows[0]?.id || '';
       setCampagnes(campaignRows); setCampagneId(target);
@@ -44,7 +62,7 @@ export default function Niveau2Selection({ currentUser }: { currentUser: User })
     finally { setLoading(false); }
   };
 
-  useEffect(() => { void load(); }, []);
+  useEffect(() => { void load(); }, [publicToken]);
 
   const selectedIds = useMemo(() => new Set(selections.map(s => s.evaluation_id)), [selections]);
   const drenaOptions = useMemo(() => [...new Set(eligible.map(e => e.drena_nom).filter(Boolean) as string[])].sort(), [eligible]);
@@ -67,14 +85,13 @@ export default function Niveau2Selection({ currentUser }: { currentUser: User })
   const startEvaluation = async () => {
     if (!selectedEvaluationId) return;
     setBusy(true); setError('');
-    const result = await DataService.addNiveau2Selection(selectedEvaluationId, currentUser);
-    if (!result.success) setError(result.error || 'Impossible de présélectionner ce COGES.');
+    const result = publicToken
+      ? await (async () => { const { error: rpcError } = await supabase!.rpc('niveau2_public_start', { p_token: publicToken, p_evaluation_id: selectedEvaluationId }); return { success: !rpcError, error: rpcError?.message }; })()
+      : await DataService.addNiveau2Selection(selectedEvaluationId, currentUser);
+    if (!result.success) setError(result.error || 'Impossible de démarrer cette grille.');
     else {
-      const next = await DataService.getNiveau2Selections(currentUser, campagneId);
-      setSelections(next);
-      const created = next.find(s => s.evaluation_id === selectedEvaluationId);
+      await load(campagneId);
       setSelectedEvaluationId('');
-      if (created) openForm(created);
     }
     setBusy(false);
   };
@@ -103,16 +120,21 @@ export default function Niveau2Selection({ currentUser }: { currentUser: User })
     }
     setBusy(true); setError('');
     try {
-      const result = await DataService.saveNiveau2(editing.id, { ...form, statut: status }, currentUser);
+      const result = publicToken
+        ? await (async () => { const { error: rpcError } = await supabase!.rpc('niveau2_public_save', { p_token: publicToken, p_selection_id: editing.id, p_payload: form, p_submit: status === 'valide' }); return { success: !rpcError, error: rpcError?.message }; })()
+        : await DataService.saveNiveau2(editing.id, { ...form, statut: status }, currentUser);
       if (!result.success) {
         setError(result.error || 'Enregistrement impossible.');
         return;
       }
       setActionMessage(status === 'brouillon' ? 'Brouillon enregistré avec succès.' : status === 'soumis' ? 'Grille soumise avec succès.' : 'Grille soumise et validée avec succès.');
-      const next = await DataService.getNiveau2Selections(currentUser, campagneId);
-      setSelections(next);
-      const updated = next.find(s => s.id === editing.id);
-      if (updated) { setEditing(updated); setForm({ ...emptyForm, ...(updated.niveau2 || {}), effectif_coges: updated.evaluation?.effectif_total ?? null }); }
+      if (publicToken) await load(campagneId);
+      else {
+        const next = await DataService.getNiveau2Selections(currentUser, campagneId);
+        setSelections(next);
+        const updated = next.find(s => s.id === editing.id);
+        if (updated) { setEditing(updated); setForm({ ...emptyForm, ...(updated.niveau2 || {}), effectif_coges: updated.evaluation?.effectif_total ?? null }); }
+      }
     } catch (e) {
       setError(formatUserFacingError('l’enregistrement de la grille de niveau 2', e));
     } finally {
@@ -120,14 +142,31 @@ export default function Niveau2Selection({ currentUser }: { currentUser: User })
     }
   };
 
+  const generateWorkshopLink = async () => {
+    if (!campagneId || !supabase) return;
+    setBusy(true); setError('');
+    try {
+      const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+      const { data, error: rpcError } = await supabase.rpc('create_niveau2_workshop_link', { p_campagne_id: campagneId, p_expires_at: expiresAt });
+      if (rpcError) throw rpcError;
+      const link = `${window.location.origin}${window.location.pathname}?niveau2_public=${data}`;
+      setGeneratedLink(link); await navigator.clipboard.writeText(link);
+      setActionMessage('Lien d’atelier valable 24 heures généré et copié.');
+    } catch (e) { setError(formatUserFacingError('la génération du lien d’atelier', e)); }
+    finally { setBusy(false); }
+  };
+
   return <div className="space-y-5">
     <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm flex flex-col lg:flex-row lg:items-center justify-between gap-4">
       <div><h2 className="text-lg font-extrabold text-slate-900 flex items-center gap-2"><Award className="h-5 w-5 text-amber-500"/> Sélection COGES – niveau 2</h2>
         <p className="text-xs text-slate-500 mt-1">Valorisation en atelier de chaque COGES déjà évalué et validé dans EROF.</p></div>
-      <div className="flex items-center gap-2"><select value={campagneId} onChange={e => { setCampagneId(e.target.value); void load(e.target.value); }} className="border rounded-lg px-3 py-2 text-xs bg-white">
+      <div className="flex flex-wrap items-center gap-2">{!publicToken && <select value={campagneId} onChange={e => { setCampagneId(e.target.value); void load(e.target.value); }} className="border rounded-lg px-3 py-2 text-xs bg-white">
         {campagnes.map(c => <option key={c.id} value={c.id}>{c.nom} – {c.annee_scolaire}</option>)}</select>
-        <button onClick={() => void load(campagneId)} className="p-2 border rounded-lg hover:bg-slate-50"><RefreshCw className="h-4 w-4"/></button></div>
+        }<button onClick={() => void load(campagneId)} className="p-2 border rounded-lg hover:bg-slate-50"><RefreshCw className="h-4 w-4"/></button>
+        {!publicToken && currentUser.role === 'admin_national' && <button onClick={() => void generateWorkshopLink()} disabled={busy || !campagneId} className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-slate-900 text-white text-xs font-bold disabled:opacity-50"><Link2 className="h-4 w-4"/>Générer le lien</button>}</div>
     </div>
+
+    {generatedLink && <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 flex items-center gap-2"><input readOnly value={generatedLink} className="flex-1 bg-white border rounded-lg px-3 py-2 text-xs"/><button onClick={() => void navigator.clipboard.writeText(generatedLink)} className="p-2 bg-emerald-600 text-white rounded-lg" title="Copier"><Copy className="h-4 w-4"/></button></div>}
 
     {error && <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg p-3 text-xs font-semibold">{error}</div>}
 

@@ -32,6 +32,7 @@ import {
 } from 'lucide-react';
 
 export default function App() {
+  const publicWorkshopToken = new URLSearchParams(window.location.search).get('niveau2_public');
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [authInitialized, setAuthInitialized] = useState(false);
   const [activeTab, setActiveTab] = useState<'dashboard' | 'niveau2' | 'bilan' | 'campagnes' | 'utilisateurs' | 'logs' | 'about'>('dashboard');
@@ -163,6 +164,19 @@ export default function App() {
       setActiveTab('dashboard');
     }
   };
+
+  if (publicWorkshopToken) {
+    const workshopUser: User = { id: 'public-workshop', email: '', nom: 'Atelier', prenom: 'Participant', role: 'enqueteur', actif: true };
+    return (
+      <div className="min-h-screen bg-[#f4f7fb]">
+        <div className="h-1.5 w-full flex"><div className="bg-[#FF8200] flex-1"/><div className="bg-white flex-1"/><div className="bg-[#009E49] flex-1"/></div>
+        <header className="bg-[#101828] text-white px-5 py-4 border-b border-slate-700">
+          <div className="app-shell"><p className="text-[9px] uppercase font-bold tracking-widest text-amber-500">DAPS-COGES • Atelier</p><h1 className="text-lg font-extrabold">Évaluation COGES – niveau 2</h1><p className="text-xs text-slate-400">Accès direct sécurisé pour les participants à l’atelier</p></div>
+        </header>
+        <main className="app-shell py-6"><Niveau2Selection currentUser={workshopUser} publicToken={publicWorkshopToken}/></main>
+      </div>
+    );
+  }
 
   if (!authInitialized) {
     return (
