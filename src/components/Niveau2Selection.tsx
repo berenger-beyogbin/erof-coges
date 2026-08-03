@@ -51,22 +51,22 @@ export default function Niveau2Selection({ currentUser, publicToken }: { current
           score_erof: row.score_erof, evaluation: publicEvaluations.find((ev: any) => ev.id === row.id), niveau2: row.niveau2
         }));
         setCampagnes(context?.campagne ? [context.campagne] : []); setCampagneId(context?.campagne?.id || '');
-        setEligible(publicEvaluations); setSelections(publicSelections); setLoading(false); return;
+        setEligible(publicEvaluations); setSelections(publicSelections); setLoading(false); return publicSelections;
       }
       const [campaignRows, evaluationRows] = await Promise.all([DataService.getCampagnes(), DataService.getEvaluations(currentUser)]);
       const target = preferredCampaign || campagneId || campaignRows.find(c => c.statut === 'ouverte')?.id || campaignRows[0]?.id || '';
       setCampagnes(campaignRows); setCampagneId(target);
       setEligible(evaluationRows.filter(e => e.campagne_id === target && ['valide', 'verrouille'].includes(e.statut) && e.score_global != null));
-      setSelections(target ? await DataService.getNiveau2Selections(currentUser, target) : []);
-    } catch (e) { setError(formatUserFacingError('le chargement de la sélection de niveau 2', e)); }
+      const loadedSelections = target ? await DataService.getNiveau2Selections(currentUser, target) : [];
+      setSelections(loadedSelections); return loadedSelections;
+    } catch (e) { setError(formatUserFacingError('le chargement de la sélection de niveau 2', e)); return []; }
     finally { setLoading(false); }
   };
 
   useEffect(() => { void load(); }, [publicToken]);
 
-  const selectedIds = useMemo(() => new Set(selections.map(s => s.evaluation_id)), [selections]);
   const drenaOptions = useMemo(() => [...new Set(eligible.map(e => e.drena_nom).filter(Boolean) as string[])].sort(), [eligible]);
-  const candidates = eligible.filter(e => !selectedIds.has(e.id) && (!selectedDrena || e.drena_nom === selectedDrena))
+  const candidates = eligible.filter(e => !selectedDrena || e.drena_nom === selectedDrena)
     .sort((a, b) => Number(b.score_global || 0) - Number(a.score_global || 0));
   const ranked = useMemo(() => [...selections].sort((a, b) => {
     const na = a.niveau2; const nb = b.niveau2;
@@ -84,13 +84,21 @@ export default function Niveau2Selection({ currentUser, publicToken }: { current
 
   const startEvaluation = async () => {
     if (!selectedEvaluationId) return;
+    const existingSelection = selections.find(row => row.evaluation_id === selectedEvaluationId);
+    if (existingSelection) {
+      openForm(existingSelection);
+      setSelectedEvaluationId('');
+      return;
+    }
     setBusy(true); setError('');
     const result = publicToken
       ? await (async () => { const { error: rpcError } = await supabase!.rpc('niveau2_public_start', { p_token: publicToken, p_evaluation_id: selectedEvaluationId }); return { success: !rpcError, error: rpcError?.message }; })()
       : await DataService.addNiveau2Selection(selectedEvaluationId, currentUser);
     if (!result.success) setError(result.error || 'Impossible de démarrer cette grille.');
     else {
-      await load(campagneId);
+      const next = await load(campagneId);
+      const opened = next.find(row => row.evaluation_id === selectedEvaluationId);
+      if (opened) openForm(opened);
       setSelectedEvaluationId('');
     }
     setBusy(false);
@@ -184,7 +192,7 @@ export default function Niveau2Selection({ currentUser, publicToken }: { current
     </div>
 
     {selectedDrena && <div className="grid grid-cols-1 xl:grid-cols-[minmax(420px,0.9fr)_minmax(560px,1.1fr)] gap-5 items-start">
-      <section className="order-1 bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden xl:sticky xl:top-4">
+      <section className="hidden md:block order-1 bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden xl:sticky xl:top-4">
         <div className="px-4 py-3 bg-slate-900 text-white"><h3 className="text-sm font-extrabold">COGES en évaluation niveau 2</h3><p className="text-[10px] text-slate-300 mt-0.5">Cliquez sur une ligne pour saisir ou modifier sa grille.</p></div>
         {loading ? <div className="p-12 text-center text-xs text-slate-500">Chargement…</div> : displayedRanked.length === 0 ? <div className="p-12 text-center text-xs text-slate-500">Aucune grille niveau 2 démarrée pour cette DRENA.</div> :
         <div className="overflow-x-auto max-h-[68vh] overflow-y-auto"><table className="min-w-full text-xs"><thead className="bg-slate-100 text-slate-600 uppercase text-[9px] sticky top-0"><tr>
