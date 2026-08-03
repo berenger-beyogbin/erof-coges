@@ -39,13 +39,13 @@ create table if not exists public.evaluations_niveau_2 (
   niveau_priorite text not null default 'Faible priorite',
   statut text not null default 'brouillon' check (statut in ('brouillon', 'soumis', 'valide')),
   commentaire_selection text,
+  participants_atelier text,
   saisi_par uuid references public.users(id) on update cascade on delete set null,
   valide_par uuid references public.users(id) on update cascade on delete set null,
   validated_at timestamptz,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   check (existence_prescolaire or effectif_prescolaire = 0),
-  check (difficulte_acces not in ('difficile', 'tres_difficile') or length(trim(coalesce(justification_acces, ''))) > 0),
   check (difficulte_acces_sante not in ('difficile', 'tres_difficile') or length(trim(coalesce(justification_acces_sante, ''))) > 0)
 );
 
@@ -53,7 +53,6 @@ create or replace function public.enforce_niveau2_selection()
 returns trigger language plpgsql security definer set search_path = public as $$
 declare
   evaluation_row public.evaluations%rowtype;
-  selected_count integer;
 begin
   select * into evaluation_row from public.evaluations where id = new.evaluation_id;
   if evaluation_row.id is null or evaluation_row.campagne_id <> new.campagne_id then
@@ -61,11 +60,6 @@ begin
   end if;
   if evaluation_row.statut not in ('valide', 'verrouille') then
     raise exception 'Seules les evaluations EROF validees ou verrouillees sont eligibles.';
-  end if;
-  select count(*) into selected_count from public.selections_erof
-    where campagne_id = new.campagne_id and id <> coalesce(new.id, gen_random_uuid());
-  if selected_count >= 15 then
-    raise exception 'La campagne comporte deja 15 COGES preselectionnes.';
   end if;
   return new;
 end;
@@ -109,19 +103,26 @@ for each row execute function public.compute_niveau2_scores();
 alter table public.selections_erof enable row level security;
 alter table public.evaluations_niveau_2 enable row level security;
 
+drop policy if exists selections_erof_select_scoped on public.selections_erof;
 create policy selections_erof_select_scoped on public.selections_erof for select to authenticated
 using (public.user_can_select_evaluation(evaluation_id));
+drop policy if exists selections_erof_admin_insert on public.selections_erof;
 create policy selections_erof_admin_insert on public.selections_erof for insert to authenticated
 with check (public.current_user_role() = 'admin_national');
+drop policy if exists selections_erof_admin_update on public.selections_erof;
 create policy selections_erof_admin_update on public.selections_erof for update to authenticated
 using (public.current_user_role() = 'admin_national') with check (public.current_user_role() = 'admin_national');
+drop policy if exists selections_erof_admin_delete on public.selections_erof;
 create policy selections_erof_admin_delete on public.selections_erof for delete to authenticated
 using (public.current_user_role() = 'admin_national');
 
+drop policy if exists evaluations_niveau2_select_scoped on public.evaluations_niveau_2;
 create policy evaluations_niveau2_select_scoped on public.evaluations_niveau_2 for select to authenticated
 using (exists (select 1 from public.selections_erof s where s.id = selection_erof_id and public.user_can_select_evaluation(s.evaluation_id)));
+drop policy if exists evaluations_niveau2_write_scoped on public.evaluations_niveau_2;
 create policy evaluations_niveau2_write_scoped on public.evaluations_niveau_2 for insert to authenticated
 with check (exists (select 1 from public.selections_erof s where s.id = selection_erof_id and public.user_can_select_evaluation(s.evaluation_id)));
+drop policy if exists evaluations_niveau2_update_scoped on public.evaluations_niveau_2;
 create policy evaluations_niveau2_update_scoped on public.evaluations_niveau_2 for update to authenticated
 using (exists (select 1 from public.selections_erof s where s.id = selection_erof_id and public.user_can_select_evaluation(s.evaluation_id)))
 with check (exists (select 1 from public.selections_erof s where s.id = selection_erof_id and public.user_can_select_evaluation(s.evaluation_id)));

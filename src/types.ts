@@ -192,6 +192,7 @@ export interface EvaluationNiveau2 {
   niveau_priorite: string;
   statut: Niveau2Status;
   commentaire_selection?: string | null;
+  participants_atelier?: string | null;
   saisi_par?: string | null;
   valide_par?: string | null;
   validated_at?: string | null;

@@ -294,7 +294,7 @@ export default function App() {
                 }`}
               >
                 <Award className="h-4 w-4" />
-                <span>Sélection niveau 2</span>
+                <span>Évaluation niveau 2</span>
               </button>
             )}
 

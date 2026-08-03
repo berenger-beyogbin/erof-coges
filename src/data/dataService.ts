@@ -1131,7 +1131,7 @@ export class LocalDemoService {
   }
 
   static async addNiveau2Selection(evaluationId: string, user: User): Promise<{ success: boolean; error?: string }> {
-    if (user.role !== 'admin_national') return { success: false, error: 'Action réservée à la DAPS-COGES.' };
+    if (!['admin_national', 'superviseur_drena', 'superviseur_iepp'].includes(user.role)) return { success: false, error: 'Votre profil ne peut pas démarrer une évaluation de niveau 2.' };
     const evaluations = getStoredItem<Evaluation[]>('evaluations', []);
     const evaluation = evaluations.find(e => e.id === evaluationId);
     if (!evaluation || !['valide', 'verrouille'].includes(evaluation.statut)) return { success: false, error: 'Cette évaluation EROF n’est pas éligible.' };
@@ -1140,7 +1140,6 @@ export class LocalDemoService {
     if (!score) return { success: false, error: 'Le score EROF est indisponible.' };
     const selections = getStoredItem<SelectionErof[]>('selections_erof', []);
     const campaignSelections = selections.filter(s => s.campagne_id === evaluation.campagne_id);
-    if (campaignSelections.length >= 15) return { success: false, error: 'La campagne comporte déjà 15 COGES présélectionnés.' };
     if (campaignSelections.some(s => s.evaluation_id === evaluationId)) return { success: false, error: 'Ce COGES est déjà présélectionné.' };
     const ranked = evaluations.filter(e => e.campagne_id === evaluation.campagne_id && ['valide', 'verrouille'].includes(e.statut))
       .map(e => ({ id: e.id, score: scores.find(s => s.evaluation_id === e.id)?.score_global ?? -1 }))
@@ -1160,13 +1159,19 @@ export class LocalDemoService {
   }
 
   static async saveNiveau2(selectionId: string, input: Partial<EvaluationNiveau2>, user: User): Promise<{ success: boolean; error?: string }> {
-    if (input.statut === 'valide' && user.role !== 'admin_national') return { success: false, error: 'Seule la DAPS-COGES peut valider la grille.' };
     const rows = getStoredItem<EvaluationNiveau2[]>('evaluations_niveau_2', []);
     const existing = rows.find(n => n.selection_erof_id === selectionId);
-    const base = { ...existing, ...input } as EvaluationNiveau2;
+    if (existing?.statut === 'valide' && user.role !== 'admin_national') {
+      return { success: false, error: 'Cette grille a été soumise et ne peut être modifiée que par un administrateur.' };
+    }
+    const selection = getStoredItem<SelectionErof[]>('selections_erof', []).find(s => s.id === selectionId);
+    const erofEvaluation = getStoredItem<Evaluation[]>('evaluations', []).find(e => e.id === selection?.evaluation_id);
+    const base = { ...existing, ...input, effectif_coges: erofEvaluation?.effectif_total ?? 0 } as EvaluationNiveau2;
     const row: EvaluationNiveau2 = { ...base, ...computeNiveau2Scores(base), id: existing?.id || crypto.randomUUID(), selection_erof_id: selectionId,
       effectif_prescolaire: base.existence_prescolaire ? Number(base.effectif_prescolaire || 0) : 0,
-      saisi_par: user.id, updated_at: new Date().toISOString(), created_at: existing?.created_at || new Date().toISOString() };
+      saisi_par: user.id, valide_par: input.statut === 'valide' ? user.id : existing?.valide_par,
+      validated_at: input.statut === 'valide' ? new Date().toISOString() : existing?.validated_at,
+      updated_at: new Date().toISOString(), created_at: existing?.created_at || new Date().toISOString() };
     setStoredItem('evaluations_niveau_2', [...rows.filter(n => n.selection_erof_id !== selectionId), row]);
     return { success: true };
   }
@@ -2189,11 +2194,9 @@ export class SupabaseDataService {
   }
 
   static async addNiveau2Selection(evaluationId: string, user: User): Promise<{ success: boolean; error?: string }> {
-    if (user.role !== 'admin_national') return { success: false, error: 'Action réservée à la DAPS-COGES.' };
+    if (!['admin_national', 'superviseur_drena', 'superviseur_iepp'].includes(user.role)) return { success: false, error: 'Votre profil ne peut pas démarrer une évaluation de niveau 2.' };
     const { data: ev, error: evError } = await supabase!.from('evaluations').select('id,campagne_id,statut,evaluation_scores(score_global)').eq('id', evaluationId).single();
     if (evError || !ev) return { success: false, error: toUserError('la lecture de l’évaluation EROF', evError) };
-    const { count } = await supabase!.from('selections_erof').select('*', { count: 'exact', head: true }).eq('campagne_id', ev.campagne_id);
-    if ((count || 0) >= 15) return { success: false, error: 'La campagne comporte déjà 15 COGES présélectionnés.' };
     const { data: ranked, error: rankError } = await supabase!.from('evaluations').select('id,evaluation_scores(score_global)').eq('campagne_id', ev.campagne_id).in('statut', ['valide', 'verrouille']);
     if (rankError) return { success: false, error: toUserError('le calcul du rang EROF', rankError) };
     const sorted = (ranked || []).sort((a: any, b: any) => Number(b.evaluation_scores?.[0]?.score_global || 0) - Number(a.evaluation_scores?.[0]?.score_global || 0) || a.id.localeCompare(b.id));
