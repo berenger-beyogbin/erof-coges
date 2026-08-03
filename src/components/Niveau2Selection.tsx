@@ -157,7 +157,7 @@ export default function Niveau2Selection({ currentUser, publicToken }: { current
   };
 
   return <div className="space-y-5">
-    <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+    <div className="hidden md:flex bg-white border border-slate-200 rounded-xl p-5 shadow-sm flex-col lg:flex-row lg:items-center justify-between gap-4">
       <div><h2 className="text-lg font-extrabold text-slate-900 flex items-center gap-2"><Award className="h-5 w-5 text-amber-500"/> Sélection COGES – niveau 2</h2>
         <p className="text-xs text-slate-500 mt-1">Valorisation en atelier de chaque COGES déjà évalué et validé dans EROF.</p></div>
       <div className="flex flex-wrap items-center gap-2">{!publicToken && <select value={campagneId} onChange={e => { setCampagneId(e.target.value); void load(e.target.value); }} className="border rounded-lg px-3 py-2 text-xs bg-white">
@@ -184,7 +184,7 @@ export default function Niveau2Selection({ currentUser, publicToken }: { current
     </div>
 
     {selectedDrena && <div className="grid grid-cols-1 xl:grid-cols-[minmax(420px,0.9fr)_minmax(560px,1.1fr)] gap-5 items-start">
-      <section className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden xl:sticky xl:top-4">
+      <section className="order-2 xl:order-1 bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden xl:sticky xl:top-4">
         <div className="px-4 py-3 bg-slate-900 text-white"><h3 className="text-sm font-extrabold">COGES en évaluation niveau 2</h3><p className="text-[10px] text-slate-300 mt-0.5">Cliquez sur une ligne pour saisir ou modifier sa grille.</p></div>
         {loading ? <div className="p-12 text-center text-xs text-slate-500">Chargement…</div> : displayedRanked.length === 0 ? <div className="p-12 text-center text-xs text-slate-500">Aucune grille niveau 2 démarrée pour cette DRENA.</div> :
         <div className="overflow-x-auto max-h-[68vh] overflow-y-auto"><table className="min-w-full text-xs"><thead className="bg-slate-100 text-slate-600 uppercase text-[9px] sticky top-0"><tr>
@@ -197,9 +197,9 @@ export default function Niveau2Selection({ currentUser, publicToken }: { current
         </tr>)}</tbody></table></div>}
       </section>
 
-      <section className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden min-h-[460px]">
+      <section className="order-1 xl:order-2 bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden min-h-[460px]">
       {editing ? <>
-      <div className="bg-slate-900 text-white p-4"><p className="text-[10px] uppercase text-amber-400 font-bold">Grille de codification</p><h3 className="font-bold">{editing.evaluation?.etablissement_nom}</h3><p className="text-[10px] text-slate-300 mt-1">{editing.evaluation?.drena_nom} / {editing.evaluation?.iepp_nom}</p></div>
+      <div className="bg-slate-900 text-white p-4"><p className="text-[10px] uppercase text-amber-400 font-bold">Grille</p><h3 className="font-bold">{editing.evaluation?.etablissement_nom}</h3><p className="text-[10px] text-slate-300 mt-1">{editing.evaluation?.drena_nom} / {editing.evaluation?.iepp_nom}</p></div>
       <div className="p-5 space-y-5"><div className="grid md:grid-cols-2 gap-4">
         <div className="md:col-span-2"><NumberField label="Effectif total des élèves (provenant d’EROF)" value={form.effectif_coges} disabled onChange={() => undefined}/></div>
         <label className="text-xs font-bold text-slate-700">Existence du préscolaire<select disabled={isReadOnly} value={form.existence_prescolaire ? 'oui':'non'} onChange={e => setForm(f => ({...f,existence_prescolaire:e.target.value==='oui',effectif_prescolaire:e.target.value==='oui'?f.effectif_prescolaire:0}))} className="mt-1 w-full border rounded-lg p-2 bg-white disabled:bg-slate-100"><option value="non">Non</option><option value="oui">Oui</option></select></label>

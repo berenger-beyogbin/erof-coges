@@ -2208,8 +2208,8 @@ export class SupabaseDataService {
 
   static async removeNiveau2Selection(selectionId: string, user: User): Promise<{ success: boolean; error?: string }> {
     if (user.role !== 'admin_national') return { success: false, error: 'Action réservée à la DAPS-COGES.' };
-    const { error } = await supabase!.from('selections_erof').delete().eq('id', selectionId);
-    return error ? { success: false, error: toUserError('le retrait de la présélection', error) } : { success: true };
+    const { error } = await supabase!.rpc('delete_niveau2_selection', { p_selection_id: selectionId });
+    return error ? { success: false, error: toUserError('la suppression de la grille niveau 2', error) } : { success: true };
   }
 
   static async saveNiveau2(selectionId: string, input: Partial<EvaluationNiveau2>, user: User): Promise<{ success: boolean; error?: string }> {
