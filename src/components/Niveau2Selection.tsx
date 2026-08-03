@@ -59,6 +59,9 @@ export default function Niveau2Selection({ currentUser }: { currentUser: User })
       || Number(nb?.score_distance_iepp ?? -1) - Number(na?.score_distance_iepp ?? -1)
       || a.rang_erof - b.rang_erof;
   }), [selections]);
+  const displayedRanked = useMemo(() => selectedDrena ? ranked.filter(row => row.evaluation?.drena_nom === selectedDrena) : [], [ranked, selectedDrena]);
+  const drenaEligibleCount = selectedDrena ? eligible.filter(row => row.drena_nom === selectedDrena).length : 0;
+  const drenaValidatedCount = displayedRanked.filter(row => row.niveau2?.statut === 'valide').length;
   const isReadOnly = editing?.niveau2?.statut === 'valide' && currentUser.role !== 'admin_national';
 
   const startEvaluation = async () => {
@@ -132,22 +135,22 @@ export default function Niveau2Selection({ currentUser }: { currentUser: User })
       <div><h3 className="text-sm font-extrabold text-slate-900">Identifier le COGES à évaluer en atelier</h3>
         <p className="text-[11px] text-slate-500 mt-1">Les choix proposés proviennent exclusivement des résultats EROF validés ou verrouillés de la campagne.</p></div>
       <div className="grid grid-cols-1 md:grid-cols-[minmax(220px,0.7fr)_minmax(320px,1.3fr)_auto] gap-3 items-end">
-        <label className="text-xs font-bold text-slate-700">1. DRENA<select value={selectedDrena} onChange={e => { setSelectedDrena(e.target.value); setSelectedEvaluationId(''); }} className="mt-1 w-full border rounded-lg px-3 py-2 text-xs bg-white">
+        <label className="text-xs font-bold text-slate-700">1. DRENA<select value={selectedDrena} onChange={e => { setSelectedDrena(e.target.value); setSelectedEvaluationId(''); setEditing(null); setActionMessage(''); setError(''); }} className="mt-1 w-full border rounded-lg px-3 py-2 text-xs bg-white">
           <option value="">Choisir une DRENA…</option>{drenaOptions.map(name => <option key={name} value={name}>{name}</option>)}</select></label>
         <label className="text-xs font-bold text-slate-700">2. COGES<select value={selectedEvaluationId} onChange={e => setSelectedEvaluationId(e.target.value)} disabled={!selectedDrena} className="mt-1 w-full border rounded-lg px-3 py-2 text-xs bg-white disabled:bg-slate-100">
           <option value="">Choisir un COGES…</option>{candidates.map(e => <option key={e.id} value={e.id}>{e.etablissement_nom} — {e.iepp_nom || 'IEPP non renseignée'} — EROF {e.score_global}/5</option>)}</select></label>
         <button onClick={startEvaluation} disabled={!selectedEvaluationId || busy} className="inline-flex items-center justify-center gap-2 bg-amber-500 disabled:opacity-40 text-slate-950 font-bold px-4 py-2 rounded-lg text-xs"><Plus className="h-4 w-4"/> Remplir le niveau 2</button>
       </div>
-      <p className="text-[11px] font-semibold text-slate-600">Progression : {selections.filter(s => s.niveau2?.statut === 'valide').length} grille(s) validée(s) sur {eligible.length} COGES EROF éligible(s).</p>
+      {selectedDrena && <p className="text-[11px] font-semibold text-slate-600">Progression pour {selectedDrena} : {drenaValidatedCount} grille(s) validée(s) sur {drenaEligibleCount} COGES EROF éligible(s).</p>}
     </div>
 
-    <div className="grid grid-cols-1 xl:grid-cols-[minmax(420px,0.9fr)_minmax(560px,1.1fr)] gap-5 items-start">
+    {selectedDrena && <div className="grid grid-cols-1 xl:grid-cols-[minmax(420px,0.9fr)_minmax(560px,1.1fr)] gap-5 items-start">
       <section className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden xl:sticky xl:top-4">
         <div className="px-4 py-3 bg-slate-900 text-white"><h3 className="text-sm font-extrabold">COGES en évaluation niveau 2</h3><p className="text-[10px] text-slate-300 mt-0.5">Cliquez sur une ligne pour saisir ou modifier sa grille.</p></div>
-        {loading ? <div className="p-12 text-center text-xs text-slate-500">Chargement…</div> : ranked.length === 0 ? <div className="p-12 text-center text-xs text-slate-500">Aucune grille niveau 2 démarrée pour cette campagne.</div> :
+        {loading ? <div className="p-12 text-center text-xs text-slate-500">Chargement…</div> : displayedRanked.length === 0 ? <div className="p-12 text-center text-xs text-slate-500">Aucune grille niveau 2 démarrée pour cette DRENA.</div> :
         <div className="overflow-x-auto max-h-[68vh] overflow-y-auto"><table className="min-w-full text-xs"><thead className="bg-slate-100 text-slate-600 uppercase text-[9px] sticky top-0"><tr>
           <th className="px-3 py-3 text-left">COGES</th><th className="px-2 py-3 text-center">EROF</th><th className="px-2 py-3 text-center">Statut</th><th className="px-2 py-3"></th>
-        </tr></thead><tbody className="divide-y">{ranked.map(row => <tr key={row.id} onClick={() => openForm(row)} className={`cursor-pointer transition-colors ${editing?.id === row.id ? 'bg-amber-50 border-l-4 border-amber-500' : 'hover:bg-slate-50 border-l-4 border-transparent'}`}>
+        </tr></thead><tbody className="divide-y">{displayedRanked.map(row => <tr key={row.id} onClick={() => openForm(row)} className={`cursor-pointer transition-colors ${editing?.id === row.id ? 'bg-amber-50 border-l-4 border-amber-500' : 'hover:bg-slate-50 border-l-4 border-transparent'}`}>
           <td className="px-3 py-3"><p className="font-bold text-slate-800">{row.evaluation?.etablissement_nom || row.evaluation_id}</p><p className="text-[10px] text-slate-500">{row.evaluation?.drena_nom} / {row.evaluation?.iepp_nom}</p></td>
           <td className="px-2 py-3 text-center font-mono">{row.score_erof}/5</td>
           <td className="px-2 py-3 text-center"><span className="px-1.5 py-1 rounded bg-slate-100 font-bold text-[9px] uppercase">{row.niveau2?.statut || 'à saisir'}</span></td>
@@ -176,7 +179,7 @@ export default function Niveau2Selection({ currentUser }: { currentUser: User })
       </div>
       </div></> : <div className="min-h-[460px] flex flex-col items-center justify-center text-center p-10"><Edit className="h-10 w-10 text-slate-300 mb-3"/><h3 className="text-sm font-bold text-slate-700">Sélectionnez un COGES</h3><p className="text-xs text-slate-500 mt-1 max-w-sm">Choisissez un COGES dans le tableau de gauche pour afficher ici sa grille de saisie ou de modification.</p></div>}
       </section>
-    </div>
+    </div>}
   </div>;
 }
 
