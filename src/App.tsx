@@ -11,6 +11,7 @@ import CampagneManager from './components/CampagneManager';
 import UserManager from './components/UserManager';
 import AdminStatistics from './components/AdminStatistics';
 import Niveau2Selection from './components/Niveau2Selection';
+import Niveau2Statistics from './components/Niveau2Statistics';
 import { DataService, SupabaseDataService } from './data/dataService';
 import { User, AuditLog } from './types';
 import { supabase, isSupabaseConfigured } from './supabaseClient';
@@ -35,7 +36,7 @@ export default function App() {
   const publicWorkshopToken = new URLSearchParams(window.location.search).get('niveau2_public');
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [authInitialized, setAuthInitialized] = useState(false);
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'niveau2' | 'bilan' | 'campagnes' | 'utilisateurs' | 'logs' | 'about'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'niveau2' | 'niveau2_bilan' | 'bilan' | 'campagnes' | 'utilisateurs' | 'logs' | 'about'>('dashboard');
   const [activeView, setActiveView] = useState<'list' | 'form'>('list');
   const [editingEvalId, setEditingEvalId] = useState<string | null>(null);
   
@@ -312,6 +313,18 @@ export default function App() {
               </button>
             )}
 
+            {currentUser.role !== 'lecteur' && (
+              <button
+                onClick={() => { setActiveTab('niveau2_bilan'); setActiveView('list'); }}
+                className={`flex items-center space-x-2 px-3.5 py-2 rounded-lg text-xs font-bold transition-all border ${
+                  activeTab === 'niveau2_bilan' ? 'bg-amber-500 text-slate-950 border-amber-400' : 'text-slate-400 border-transparent hover:bg-slate-800/40 hover:text-white'
+                }`}
+              >
+                <BarChart3 className="h-4 w-4" />
+                <span>Bilan niveau 2</span>
+              </button>
+            )}
+
             {currentUser.role === 'admin_national' && (
               <button
                 onClick={() => setActiveTab('campagnes')}
@@ -403,6 +416,10 @@ export default function App() {
 
         {activeTab === 'niveau2' && currentUser.role !== 'lecteur' && (
           <Niveau2Selection currentUser={currentUser} />
+        )}
+
+        {activeTab === 'niveau2_bilan' && currentUser.role !== 'lecteur' && (
+          <Niveau2Statistics currentUser={currentUser} />
         )}
 
         {/* Campaign management tab panel */}

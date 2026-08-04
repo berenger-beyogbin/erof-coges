@@ -2,13 +2,12 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Award, Copy, Edit, Link2, Plus, RefreshCw, Trash2 } from 'lucide-react';
 import { DataService, formatUserFacingError } from '../data/dataService';
 import { AccessDifficulty, Campagne, Evaluation, EvaluationNiveau2, SelectionErof, User } from '../types';
-import { needsAccessJustification } from '../niveau2Scoring';
 import { supabase } from '../supabaseClient';
 
 const emptyForm: Partial<EvaluationNiveau2> = {
   effectif_coges: null, existence_prescolaire: false, effectif_prescolaire: 0,
-  distance_iepp_km: undefined, difficulte_acces: 'facile', justification_acces: '',
-  distance_centre_sante_km: undefined, difficulte_acces_sante: 'facile', justification_acces_sante: '',
+  distance_iepp_km: undefined, difficulte_acces: undefined, justification_acces: '',
+  distance_centre_sante_km: undefined, difficulte_acces_sante: undefined, justification_acces_sante: '',
   statut: 'brouillon', commentaire_selection: '', participants_atelier: ''
 };
 
@@ -17,6 +16,18 @@ const difficultyOptions: { value: AccessDifficulty; label: string }[] = [
   { value: 'moyennement_difficile', label: 'Moyennement difficile' },
   { value: 'difficile', label: 'Difficile' },
   { value: 'tres_difficile', label: 'Très difficile' }
+];
+
+const ieppDistanceOptions = [
+  { value: 20, label: '0 à 20 km' },
+  { value: 40, label: '20 à 40 km' },
+  { value: 41, label: 'Plus de 40 km' }
+];
+
+const healthCenterDistanceOptions = [
+  { value: 10, label: '0 à 10 km' },
+  { value: 25, label: '10 à 25 km' },
+  { value: 26, label: 'Plus de 25 km' }
 ];
 
 export default function Niveau2Selection({ currentUser, publicToken }: { currentUser: User; publicToken?: string }) {
@@ -71,11 +82,8 @@ export default function Niveau2Selection({ currentUser, publicToken }: { current
   const ranked = useMemo(() => [...selections].sort((a, b) => {
     const na = a.niveau2; const nb = b.niveau2;
     return Number(nb?.score_total ?? -1) - Number(na?.score_total ?? -1)
-      || Number(b.score_erof) - Number(a.score_erof)
-      || (Number(nb?.score_distance_sante ?? -1) + Number(nb?.score_acces_sante ?? -1)) - (Number(na?.score_distance_sante ?? -1) + Number(na?.score_acces_sante ?? -1))
-      || Number(nb?.score_acces_coges ?? -1) - Number(na?.score_acces_coges ?? -1)
-      || Number(nb?.score_distance_iepp ?? -1) - Number(na?.score_distance_iepp ?? -1)
-      || a.rang_erof - b.rang_erof;
+      || Number(nb?.effectif_coges ?? 0) - Number(na?.effectif_coges ?? 0)
+      || (a.evaluation?.etablissement_nom || '').localeCompare(b.evaluation?.etablissement_nom || '', 'fr');
   }), [selections]);
   const displayedRanked = useMemo(() => selectedDrena ? ranked.filter(row => row.evaluation?.drena_nom === selectedDrena) : [], [ranked, selectedDrena]);
   const drenaEligibleCount = selectedDrena ? eligible.filter(row => row.drena_nom === selectedDrena).length : 0;
@@ -123,8 +131,8 @@ export default function Niveau2Selection({ currentUser, publicToken }: { current
     setActionMessage('');
     if (status !== 'brouillon') {
       if (form.distance_iepp_km === undefined || form.distance_iepp_km === null || form.distance_centre_sante_km === undefined || form.distance_centre_sante_km === null) return setError('Renseignez les deux distances avant de soumettre.');
+      if (!form.difficulte_acces || !form.difficulte_acces_sante) return setError('Sélectionnez les deux difficultés d’accès avant de soumettre.');
       if (Number(form.distance_iepp_km) < 0 || Number(form.distance_centre_sante_km) < 0 || Number(form.effectif_prescolaire) < 0) return setError('Les valeurs numériques doivent être positives.');
-      if (needsAccessJustification(form.difficulte_acces_sante || 'facile') && !form.justification_acces_sante?.trim()) return setError('Justifiez la difficulté d’accès au centre de santé.');
     }
     setBusy(true); setError('');
     try {
@@ -212,12 +220,11 @@ export default function Niveau2Selection({ currentUser, publicToken }: { current
         <div className="md:col-span-2"><NumberField label="Effectif total des élèves (provenant d’EROF)" value={form.effectif_coges} disabled onChange={() => undefined}/></div>
         <label className="text-xs font-bold text-slate-700">Existence du préscolaire<select disabled={isReadOnly} value={form.existence_prescolaire ? 'oui':'non'} onChange={e => setForm(f => ({...f,existence_prescolaire:e.target.value==='oui',effectif_prescolaire:e.target.value==='oui'?f.effectif_prescolaire:0}))} className="mt-1 w-full border rounded-lg p-2 bg-white disabled:bg-slate-100"><option value="non">Non</option><option value="oui">Oui</option></select></label>
         <NumberField label="Effectif préscolaire" value={form.effectif_prescolaire} disabled={!form.existence_prescolaire || isReadOnly} onChange={v => setForm(f => ({...f,effectif_prescolaire:v}))}/>
-        <NumberField label="Distance COGES – IEPP (km)" value={form.distance_iepp_km} disabled={isReadOnly} step="0.1" onChange={v => setForm(f => ({...f,distance_iepp_km:v}))}/>
-        <DifficultyField label="Difficulté d’accès au COGES" value={form.difficulte_acces || 'facile'} disabled={isReadOnly} onChange={v => setForm(f => ({...f,difficulte_acces:v}))}/>
-        <NumberField label="Distance COGES – centre de santé (km)" value={form.distance_centre_sante_km} disabled={isReadOnly} step="0.1" onChange={v => setForm(f => ({...f,distance_centre_sante_km:v}))}/>
-        <DifficultyField label="Difficulté d’accès au centre de santé" value={form.difficulte_acces_sante || 'facile'} disabled={isReadOnly} onChange={v => setForm(f => ({...f,difficulte_acces_sante:v}))}/>
+        <DistanceField label="Distance COGES – IEPP" value={form.distance_iepp_km} options={ieppDistanceOptions} disabled={isReadOnly} onChange={v => setForm(f => ({...f,distance_iepp_km:v}))}/>
+        <DifficultyField label="Difficulté d’accès au COGES" value={form.difficulte_acces} disabled={isReadOnly} onChange={v => setForm(f => ({...f,difficulte_acces:v}))}/>
+        <DistanceField label="Distance COGES – centre de santé" value={form.distance_centre_sante_km} options={healthCenterDistanceOptions} disabled={isReadOnly} onChange={v => setForm(f => ({...f,distance_centre_sante_km:v}))}/>
+        <DifficultyField label="Difficulté d’accès au centre de santé" value={form.difficulte_acces_sante} disabled={isReadOnly} onChange={v => setForm(f => ({...f,difficulte_acces_sante:v}))}/>
       </div>
-      {needsAccessJustification(form.difficulte_acces_sante || 'facile') && <TextField label="Justification de l’accès au centre de santé *" value={form.justification_acces_sante || ''} disabled={isReadOnly} onChange={v => setForm(f=>({...f,justification_acces_sante:v}))}/>} 
       <div className="border-t border-slate-200 pt-4 space-y-3">
         {error && <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-700">{error}</div>}
         {actionMessage && <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700">{actionMessage}</div>}
@@ -231,5 +238,8 @@ export default function Niveau2Selection({ currentUser, publicToken }: { current
 }
 
 function NumberField({label,value,onChange,disabled,step='1'}:{label:string;value:any;onChange:(v:number|undefined)=>void;disabled?:boolean;step?:string}) { return <label className="text-xs font-bold text-slate-700">{label}<input type="number" min="0" step={step} disabled={disabled} value={value ?? ''} onChange={e=>onChange(e.target.value === '' ? undefined : Number(e.target.value))} className="mt-1 w-full border rounded-lg p-2 disabled:bg-slate-100"/></label>; }
-function DifficultyField({label,value,onChange,disabled}:{label:string;value:AccessDifficulty;onChange:(v:AccessDifficulty)=>void;disabled?:boolean}) { return <label className="text-xs font-bold text-slate-700">{label}<select disabled={disabled} value={value} onChange={e=>onChange(e.target.value as AccessDifficulty)} className="mt-1 w-full border rounded-lg p-2 bg-white disabled:bg-slate-100">{difficultyOptions.map(o=><option key={o.value} value={o.value}>{o.label}</option>)}</select></label>; }
-function TextField({label,value,onChange,disabled}:{label:string;value:string;onChange:(v:string)=>void;disabled?:boolean}) { return <label className="block text-xs font-bold text-slate-700">{label}<textarea disabled={disabled} value={value} onChange={e=>onChange(e.target.value)} rows={2} className="mt-1 w-full border rounded-lg p-2 font-normal disabled:bg-slate-100"/></label>; }
+function DistanceField({label,value,options,onChange,disabled}:{label:string;value:number|undefined;options:{value:number;label:string}[];onChange:(v:number|undefined)=>void;disabled?:boolean}) {
+  const selectedValue = value == null ? '' : options.find(option => value <= option.value)?.value ?? options[options.length - 1].value;
+  return <label className="text-xs font-bold text-slate-700">{label}<select disabled={disabled} value={selectedValue} onChange={e=>onChange(e.target.value === '' ? undefined : Number(e.target.value))} className="mt-1 w-full border rounded-lg p-2 bg-white disabled:bg-slate-100"><option value="">Sélectionner une distance…</option>{options.map(option=><option key={option.value} value={option.value}>{option.label}</option>)}</select></label>;
+}
+function DifficultyField({label,value,onChange,disabled}:{label:string;value:AccessDifficulty|undefined;onChange:(v:AccessDifficulty)=>void;disabled?:boolean}) { return <label className="text-xs font-bold text-slate-700">{label}<select required disabled={disabled} value={value ?? ''} onChange={e=>onChange(e.target.value as AccessDifficulty)} className="mt-1 w-full border rounded-lg p-2 bg-white disabled:bg-slate-100"><option value="">Sélectionner une difficulté…</option>{difficultyOptions.map(o=><option key={o.value} value={o.value}>{o.label}</option>)}</select></label>; }
