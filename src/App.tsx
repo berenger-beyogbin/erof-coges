@@ -13,6 +13,7 @@ import AdminStatistics from './components/AdminStatistics';
 import Niveau2Selection from './components/Niveau2Selection';
 import Niveau2Statistics from './components/Niveau2Statistics';
 import FinalCogesSelection from './components/FinalCogesSelection';
+import CombinedCogesRanking from './components/CombinedCogesRanking';
 import { DataService, SupabaseDataService } from './data/dataService';
 import { User, AuditLog } from './types';
 import { supabase, isSupabaseConfigured } from './supabaseClient';
@@ -31,6 +32,7 @@ import {
   CalendarRange,
   BarChart3,
   Award,
+  Trophy,
   ClipboardCheck
 } from 'lucide-react';
 
@@ -39,7 +41,7 @@ export default function App() {
   const publicFinalSelectionToken = new URLSearchParams(window.location.search).get('selection_finale_public');
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [authInitialized, setAuthInitialized] = useState(false);
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'niveau2' | 'niveau2_bilan' | 'selection_finale' | 'bilan' | 'campagnes' | 'utilisateurs' | 'logs' | 'about'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'niveau2' | 'niveau2_bilan' | 'selection_finale' | 'classement_combine' | 'bilan' | 'campagnes' | 'utilisateurs' | 'logs' | 'about'>('dashboard');
   const [activeView, setActiveView] = useState<'list' | 'form'>('list');
   const [editingEvalId, setEditingEvalId] = useState<string | null>(null);
   
@@ -355,6 +357,18 @@ export default function App() {
 
             {currentUser.role === 'admin_national' && (
               <button
+                onClick={() => { setActiveTab('classement_combine'); setActiveView('list'); }}
+                className={`flex items-center space-x-2 px-3.5 py-2 rounded-lg text-xs font-bold transition-all border ${
+                  activeTab === 'classement_combine' ? 'bg-violet-600 text-white border-violet-500' : 'text-slate-400 border-transparent hover:bg-slate-800/40 hover:text-white'
+                }`}
+              >
+                <Trophy className="h-4 w-4" />
+                <span>Classement combiné</span>
+              </button>
+            )}
+
+            {currentUser.role === 'admin_national' && (
+              <button
                 onClick={() => setActiveTab('campagnes')}
                 className={`flex items-center space-x-2 px-3.5 py-2 rounded-lg text-xs font-bold transition-all border ${
                   activeTab === 'campagnes'
@@ -452,6 +466,10 @@ export default function App() {
 
         {activeTab === 'selection_finale' && currentUser.role === 'admin_national' && (
           <FinalCogesSelection currentUser={currentUser} />
+        )}
+
+        {activeTab === 'classement_combine' && currentUser.role === 'admin_national' && (
+          <CombinedCogesRanking currentUser={currentUser} />
         )}
 
         {/* Campaign management tab panel */}
