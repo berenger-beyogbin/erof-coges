@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ArrowDown, ArrowUp, CheckCircle2, ClipboardCheck, LockKeyhole, RefreshCw, Save } from 'lucide-react';
+import { CheckCircle2, ClipboardCheck, LockKeyhole, RefreshCw, Save } from 'lucide-react';
 import { DataService, formatUserFacingError } from '../data/dataService';
 import { Campagne, Evaluation, FinalSelectionSession, SelectionErof, User } from '../types';
 
@@ -63,14 +63,6 @@ export default function FinalCogesSelection({ currentUser }: { currentUser: User
       || (a.evaluation?.etablissement_nom || '').localeCompare(b.evaluation?.etablissement_nom || '', 'fr')),
   [niveau2Rows, selectedDrena]);
   const level2Ranks = useMemo(() => new Map(candidates.map((row, index) => [row.evaluation_id, index + 1])), [candidates]);
-  const displayedCandidates = useMemo(() => [...candidates].sort((a, b) => {
-    const aFinal = selectedIds.indexOf(a.evaluation_id);
-    const bFinal = selectedIds.indexOf(b.evaluation_id);
-    if (aFinal >= 0 && bFinal >= 0) return aFinal - bFinal;
-    if (aFinal >= 0) return -1;
-    if (bFinal >= 0) return 1;
-    return Number(level2Ranks.get(a.evaluation_id)) - Number(level2Ranks.get(b.evaluation_id));
-  }), [candidates, selectedIds, level2Ranks]);
 
   const chooseDrena = (name: string) => {
     setSelectedDrena(name); setError(''); setMessage('');
@@ -82,18 +74,6 @@ export default function FinalCogesSelection({ currentUser }: { currentUser: User
   const toggle = (evaluationId: string) => {
     if (isLocked) return;
     setSelectedIds(ids => ids.includes(evaluationId) ? ids.filter(id => id !== evaluationId) : [...ids, evaluationId]);
-  };
-
-  const moveSelected = (evaluationId: string, direction: -1 | 1) => {
-    if (isLocked) return;
-    setSelectedIds(ids => {
-      const currentIndex = ids.indexOf(evaluationId);
-      const targetIndex = currentIndex + direction;
-      if (currentIndex < 0 || targetIndex < 0 || targetIndex >= ids.length) return ids;
-      const reordered = [...ids];
-      [reordered[currentIndex], reordered[targetIndex]] = [reordered[targetIndex], reordered[currentIndex]];
-      return reordered;
-    });
   };
 
   const save = async (validate: boolean) => {
@@ -129,15 +109,16 @@ export default function FinalCogesSelection({ currentUser }: { currentUser: User
         <div><h3 className="text-sm font-extrabold">{selectedDrena}</h3><p className="text-[10px] text-slate-300">{candidates.length} COGES disposent des deux évaluations validées · {selectedIds.length} retenu(s) et classé(s)</p></div>
         <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[10px] font-bold ${isLocked ? 'bg-emerald-500 text-white' : 'bg-amber-400 text-slate-950'}`}>{isLocked ? <LockKeyhole className="h-3.5 w-3.5"/> : null}{isLocked ? 'Sélection validée' : 'Brouillon modifiable'}</span>
       </div>
+      {!isLocked && candidates.length > 0 && <div className="border-b border-blue-200 bg-blue-50 px-4 py-3 text-xs font-semibold text-blue-900"><strong>Comment classer :</strong> cochez les COGES dans l’ordre souhaité. Le premier coché devient rang 1, le deuxième rang 2, et ainsi de suite. Une ligne décochée perd son rang et les suivants sont automatiquement remontés.</div>}
       {candidates.length === 0 ? <div className="p-10 text-center text-xs text-slate-500">Aucun COGES avec une évaluation 2 validée dans cette DRENA.</div> :
       <div className="overflow-x-auto"><table className="min-w-[900px] w-full text-xs"><thead className="bg-slate-100 text-[9px] uppercase text-slate-600"><tr>
         <th className="px-3 py-3 text-center">Retenir</th><th className="px-3 py-3 text-center">Rang final</th><th className="px-3 py-3 text-left">COGES</th><th className="px-3 py-3 text-left">IEPP</th><th className="px-3 py-3 text-center">Rang éval. 1</th><th className="px-3 py-3 text-center">Score éval. 1</th><th className="px-3 py-3 text-center">Rang éval. 2</th><th className="px-3 py-3 text-center">Score priorité</th><th className="px-3 py-3 text-left">Priorité</th>
-      </tr></thead><tbody className="divide-y">{displayedCandidates.map(row => {
+      </tr></thead><tbody className="divide-y">{candidates.map(row => {
         const finalIndex = selectedIds.indexOf(row.evaluation_id);
         const checked = finalIndex >= 0;
         return <tr key={row.id} onClick={() => toggle(row.evaluation_id)} className={`${isLocked ? '' : 'cursor-pointer'} ${checked ? 'bg-emerald-50' : 'hover:bg-slate-50'}`}>
           <td className="px-3 py-3 text-center"><input type="checkbox" checked={checked} disabled={isLocked} onChange={() => toggle(row.evaluation_id)} onClick={e => e.stopPropagation()} className="h-4 w-4 accent-emerald-600"/></td>
-          <td className="px-3 py-3 text-center">{checked ? <div className="flex items-center justify-center gap-1"><span className="inline-flex min-w-7 justify-center rounded-full bg-emerald-600 px-2 py-1 font-extrabold text-white">{finalIndex + 1}</span>{!isLocked && <span className="inline-flex flex-col"><button type="button" title="Monter dans le classement" disabled={finalIndex === 0} onClick={e => { e.stopPropagation(); moveSelected(row.evaluation_id, -1); }} className="rounded p-0.5 text-slate-600 hover:bg-white disabled:opacity-25"><ArrowUp className="h-3.5 w-3.5"/></button><button type="button" title="Descendre dans le classement" disabled={finalIndex === selectedIds.length - 1} onClick={e => { e.stopPropagation(); moveSelected(row.evaluation_id, 1); }} className="rounded p-0.5 text-slate-600 hover:bg-white disabled:opacity-25"><ArrowDown className="h-3.5 w-3.5"/></button></span>}</div> : '—'}</td>
+          <td className="px-3 py-3 text-center">{checked ? <span className="inline-flex min-w-7 justify-center rounded-full bg-emerald-600 px-2 py-1 font-extrabold text-white">{finalIndex + 1}</span> : '—'}</td>
           <td className="px-3 py-3 font-bold text-slate-800">{row.evaluation?.etablissement_nom || row.evaluation_id}</td><td className="px-3 py-3 text-slate-600">{row.evaluation?.iepp_nom || '—'}</td><td className="px-3 py-3 text-center font-bold">{level1Ranks.get(row.evaluation_id) || '—'}</td><td className="px-3 py-3 text-center">{Number(row.score_erof).toFixed(2).replace('.', ',')} / 5</td><td className="px-3 py-3 text-center font-bold">{level2Ranks.get(row.evaluation_id) || '—'}</td><td className="px-3 py-3 text-center font-extrabold">{row.niveau2?.score_total} / 16</td><td className="px-3 py-3">{row.niveau2?.niveau_priorite}</td>
         </tr>;
       })}</tbody></table></div>}
