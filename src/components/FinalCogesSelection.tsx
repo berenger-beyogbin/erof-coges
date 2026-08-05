@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { CheckCircle2, ClipboardCheck, LockKeyhole, RefreshCw, Save } from 'lucide-react';
+import { CheckCircle2, ClipboardCheck, Copy, Link2, LockKeyhole, RefreshCw, Save } from 'lucide-react';
 import { DataService, formatUserFacingError } from '../data/dataService';
 import { Campagne, Evaluation, FinalSelectionSession, SelectionErof, User } from '../types';
+import { supabase } from '../supabaseClient';
 
 type RankedEvaluation = Evaluation & {
   etablissement_nom?: string;
@@ -10,7 +11,7 @@ type RankedEvaluation = Evaluation & {
   score_global?: number;
 };
 
-export default function FinalCogesSelection({ currentUser }: { currentUser: User }) {
+export default function FinalCogesSelection({ currentUser, publicToken }: { currentUser: User; publicToken?: string }) {
   const [campagnes, setCampagnes] = useState<Campagne[]>([]);
   const [campagneId, setCampagneId] = useState('');
   const [evaluations, setEvaluations] = useState<RankedEvaluation[]>([]);
@@ -23,10 +24,29 @@ export default function FinalCogesSelection({ currentUser }: { currentUser: User
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
+  const [generatedLink, setGeneratedLink] = useState('');
 
   const load = async (preferredCampaign?: string, preserveDrena = false) => {
     setLoading(true); setError('');
     try {
+      if (publicToken) {
+        const { data, error: rpcError } = await supabase!.rpc('final_selection_public_context', { p_token: publicToken });
+        if (rpcError) throw rpcError;
+        const context: any = data;
+        const candidateRows: SelectionErof[] = (context?.candidates || []).map((row: any) => ({
+          id: row.selection_id, campagne_id: row.campagne_id, evaluation_id: row.evaluation_id,
+          rang_erof: 0, score_erof: Number(row.score_erof || 0), niveau2: row.niveau2,
+          evaluation: { id: row.evaluation_id, campagne_id: row.campagne_id, statut: 'valide',
+            etablissement_nom: row.etablissement_nom, iepp_nom: row.iepp_nom, drena_nom: row.drena_nom } as any
+        }));
+        const evaluationRows: RankedEvaluation[] = candidateRows.map(row => ({
+          ...(row.evaluation as Evaluation), score_global: row.score_erof,
+          etablissement_nom: row.evaluation?.etablissement_nom, iepp_nom: row.evaluation?.iepp_nom, drena_nom: row.evaluation?.drena_nom
+        }));
+        setCampagnes(context?.campagne ? [context.campagne] : []); setCampagneId(context?.campagne?.id || '');
+        setEvaluations(evaluationRows); setNiveau2Rows(candidateRows); setSessions(context?.sessions || []);
+        setLoading(false); return;
+      }
       const [campaignRows, evaluationRows] = await Promise.all([DataService.getCampagnes(), DataService.getEvaluations(currentUser)]);
       const target = preferredCampaign || campagneId || campaignRows.find(c => c.statut === 'ouverte')?.id || campaignRows[0]?.id || '';
       const [n2, finalRows] = await Promise.all([
@@ -41,7 +61,7 @@ export default function FinalCogesSelection({ currentUser }: { currentUser: User
     finally { setLoading(false); }
   };
 
-  useEffect(() => { void load(); }, []);
+  useEffect(() => { void load(); }, [publicToken]);
 
   const drenaOptions = useMemo(() => [...new Set(niveau2Rows
     .filter(row => row.niveau2?.statut === 'valide')
@@ -80,7 +100,12 @@ export default function FinalCogesSelection({ currentUser }: { currentUser: User
     if (!selectedDrena || !selectedIds.length || busy) return;
     if (validate && !window.confirm(`Valider définitivement ${selectedIds.length} COGES pour ${selectedDrena} ? Cette action verrouillera la sélection.`)) return;
     setBusy(true); setError(''); setMessage('');
-    const result = await DataService.saveFinalSelection(campagneId, selectedDrena, selectedIds, commentaire, validate, currentUser);
+    const result = publicToken
+      ? await (async () => { const { error: rpcError } = await supabase!.rpc('final_selection_public_save', {
+          p_token: publicToken, p_drena_nom: selectedDrena, p_evaluation_ids: selectedIds,
+          p_commentaire: commentaire || null, p_validate: validate
+        }); return { success: !rpcError, error: rpcError?.message }; })()
+      : await DataService.saveFinalSelection(campagneId, selectedDrena, selectedIds, commentaire, validate, currentUser);
     if (!result.success) setError(result.error || 'Enregistrement impossible.');
     else {
       setMessage(validate ? 'Sélection définitive validée et verrouillée.' : 'Brouillon enregistré.');
@@ -89,16 +114,33 @@ export default function FinalCogesSelection({ currentUser }: { currentUser: User
     setBusy(false);
   };
 
+  const generatePublicLink = async () => {
+    if (!campagneId || !supabase) return;
+    setBusy(true); setError(''); setMessage('');
+    try {
+      const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+      const { data, error: rpcError } = await supabase.rpc('create_final_selection_public_link', { p_campagne_id: campagneId, p_expires_at: expiresAt });
+      if (rpcError) throw rpcError;
+      const link = `${window.location.origin}${window.location.pathname}?selection_finale_public=${data}`;
+      setGeneratedLink(link); await navigator.clipboard.writeText(link);
+      setMessage('Lien public valable 24 heures généré et copié.');
+    } catch (e) { setError(formatUserFacingError('la génération du lien public', e)); }
+    finally { setBusy(false); }
+  };
+
   return <div className="space-y-5">
     <header className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
       <h2 className="flex items-center gap-2 text-lg font-extrabold text-slate-900"><ClipboardCheck className="h-5 w-5 text-emerald-600"/> Sélection définitive des COGES</h2>
       <p className="mt-1 text-xs text-slate-500">Croisez les résultats validés des évaluations 1 et 2, retenez les COGES puis fixez leur classement final par DRENA.</p>
       <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-[1fr_1fr_auto] md:items-end">
-        <label className="text-xs font-bold text-slate-700">Campagne<select value={campagneId} onChange={e => void load(e.target.value)} className="mt-1 w-full rounded-lg border bg-white px-3 py-2">{campagnes.map(c => <option key={c.id} value={c.id}>{c.nom} — {c.annee_scolaire}</option>)}</select></label>
+        <label className="text-xs font-bold text-slate-700">Campagne<select value={campagneId} disabled={Boolean(publicToken)} onChange={e => void load(e.target.value)} className="mt-1 w-full rounded-lg border bg-white px-3 py-2 disabled:bg-slate-100">{campagnes.map(c => <option key={c.id} value={c.id}>{c.nom} — {c.annee_scolaire}</option>)}</select></label>
         <label className="text-xs font-bold text-slate-700">DRENA<select value={selectedDrena} onChange={e => chooseDrena(e.target.value)} className="mt-1 w-full rounded-lg border bg-white px-3 py-2"><option value="">Sélectionner une DRENA…</option>{drenaOptions.map(name => <option key={name}>{name}</option>)}</select></label>
         <button type="button" onClick={() => void load(campagneId, true)} disabled={loading} className="inline-flex items-center justify-center gap-2 rounded-lg border px-3 py-2 text-xs font-bold"><RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`}/> Actualiser</button>
       </div>
     </header>
+
+    {!publicToken && currentUser.role === 'admin_national' && <div className="flex flex-wrap items-center justify-end gap-2"><button type="button" onClick={() => void generatePublicLink()} disabled={busy || !campagneId} className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2.5 text-xs font-bold text-white disabled:opacity-40"><Link2 className="h-4 w-4"/> Générer un lien public</button></div>}
+    {generatedLink && <div className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 p-3"><input readOnly value={generatedLink} className="flex-1 rounded-lg border bg-white px-3 py-2 text-xs"/><button type="button" onClick={() => void navigator.clipboard.writeText(generatedLink)} className="rounded-lg bg-emerald-600 p-2 text-white" title="Copier"><Copy className="h-4 w-4"/></button></div>}
 
     {error && <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-xs font-semibold text-red-700">{error}</div>}
     {message && <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-xs font-semibold text-emerald-700">{message}</div>}

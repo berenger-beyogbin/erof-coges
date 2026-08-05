@@ -36,6 +36,7 @@ import {
 
 export default function App() {
   const publicWorkshopToken = new URLSearchParams(window.location.search).get('niveau2_public');
+  const publicFinalSelectionToken = new URLSearchParams(window.location.search).get('selection_finale_public');
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [authInitialized, setAuthInitialized] = useState(false);
   const [activeTab, setActiveTab] = useState<'dashboard' | 'niveau2' | 'niveau2_bilan' | 'selection_finale' | 'bilan' | 'campagnes' | 'utilisateurs' | 'logs' | 'about'>('dashboard');
@@ -167,6 +168,19 @@ export default function App() {
       setActiveTab('dashboard');
     }
   };
+
+  if (publicFinalSelectionToken) {
+    const publicUser: User = { id: 'public-final-selection', email: '', nom: 'Sélection', prenom: 'Participant', role: 'enqueteur', actif: true };
+    return (
+      <div className="min-h-screen bg-[#f4f7fb]">
+        <div className="h-1.5 w-full flex"><div className="bg-[#FF8200] flex-1"/><div className="bg-white flex-1"/><div className="bg-[#009E49] flex-1"/></div>
+        <header className="bg-[#101828] text-white px-5 py-4 border-b border-slate-700">
+          <div className="app-shell"><p className="text-[9px] uppercase font-bold tracking-widest text-emerald-400">DAPS-COGES • Atelier</p><h1 className="text-lg font-extrabold">Sélection définitive des COGES</h1><p className="text-xs text-slate-400">Accès public sécurisé pour le classement final par DRENA</p></div>
+        </header>
+        <main className="app-shell py-6"><FinalCogesSelection currentUser={publicUser} publicToken={publicFinalSelectionToken}/></main>
+      </div>
+    );
+  }
 
   if (publicWorkshopToken) {
     const workshopUser: User = { id: 'public-workshop', email: '', nom: 'Atelier', prenom: 'Participant', role: 'enqueteur', actif: true };
