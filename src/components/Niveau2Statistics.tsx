@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { BarChart3, RefreshCw } from 'lucide-react';
+import { BarChart3, ChevronRight, RefreshCw, TrendingUp } from 'lucide-react';
 import { DataService, formatUserFacingError } from '../data/dataService';
 import { Campagne, Evaluation, SelectionErof, User } from '../types';
 
@@ -32,7 +32,53 @@ export default function Niveau2Statistics({ currentUser }: { currentUser: User }
 
   useEffect(() => { void load(); }, []);
 
-  const drenaOptions = useMemo(() => [...new Set(eligible.map(row => row.drena_nom).filter(Boolean) as string[])].sort(), [eligible]);
+  const drenaOptions = useMemo(() => [...new Set([
+    ...eligible.map(row => row.drena_nom),
+    ...selections.map(row => row.evaluation?.drena_nom)
+  ].filter(Boolean) as string[])].sort((a, b) => a.localeCompare(b, 'fr')), [eligible, selections]);
+  const recapByDrena = useMemo(() => drenaOptions.map(drena => {
+    const drenaEligible = eligible.filter(row => row.drena_nom === drena);
+    const drenaRows = selections.filter(row => row.evaluation?.drena_nom === drena);
+    const started = drenaRows.filter(row => Boolean(row.niveau2));
+    const draft = drenaRows.filter(row => row.niveau2?.statut === 'brouillon');
+    const submitted = drenaRows.filter(row => row.niveau2?.statut === 'soumis');
+    const validated = drenaRows.filter(row => row.niveau2?.statut === 'valide');
+    const latestUpdate = started.reduce<string | undefined>((latest, row) => {
+      const candidate = row.niveau2?.updated_at || row.niveau2?.created_at;
+      return candidate && (!latest || candidate > latest) ? candidate : latest;
+    }, undefined);
+    return {
+      drena,
+      eligible: drenaEligible.length,
+      selected: drenaRows.length,
+      notStarted: drenaRows.length - started.length,
+      started: started.length,
+      draft: draft.length,
+      submitted: submitted.length,
+      validated: validated.length,
+      fillRate: drenaRows.length ? Math.round((started.length / drenaRows.length) * 100) : 0,
+      validationRate: drenaRows.length ? Math.round((validated.length / drenaRows.length) * 100) : 0,
+      latestUpdate
+    };
+  }), [drenaOptions, eligible, selections]);
+  const globalRecap = useMemo(() => {
+    const totals = recapByDrena.reduce((acc, row) => ({
+      eligible: acc.eligible + row.eligible,
+      selected: acc.selected + row.selected,
+      notStarted: acc.notStarted + row.notStarted,
+      started: acc.started + row.started,
+      draft: acc.draft + row.draft,
+      submitted: acc.submitted + row.submitted,
+      validated: acc.validated + row.validated,
+      latestUpdate: row.latestUpdate && (!acc.latestUpdate || row.latestUpdate > acc.latestUpdate) ? row.latestUpdate : acc.latestUpdate
+    }), { eligible: 0, selected: 0, notStarted: 0, started: 0, draft: 0, submitted: 0, validated: 0, latestUpdate: undefined as string | undefined });
+    return {
+      ...totals,
+      drena: 'TOTAL GLOBAL',
+      fillRate: totals.selected ? Math.round((totals.started / totals.selected) * 100) : 0,
+      validationRate: totals.selected ? Math.round((totals.validated / totals.selected) * 100) : 0
+    };
+  }, [recapByDrena]);
   const drenaEligibleCount = eligible.filter(row => row.drena_nom === selectedDrena).length;
   const drenaSelections = selections.filter(row => row.evaluation?.drena_nom === selectedDrena);
   const ranking = drenaSelections
@@ -59,6 +105,40 @@ export default function Niveau2Statistics({ currentUser }: { currentUser: User }
     </header>
 
     {error && <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-xs font-semibold text-red-700">{error}</div>}
+
+    <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+      <div className="flex items-start justify-between gap-3 border-b border-slate-200 px-4 py-3">
+        <div><h3 className="flex items-center gap-2 text-sm font-extrabold text-slate-900"><TrendingUp className="h-4 w-4 text-emerald-600"/> Évolution globale des remplissages</h3><p className="mt-0.5 text-[10px] text-slate-500">Suivi des grilles retenues au niveau 2, de leur démarrage jusqu’à leur validation.</p></div>
+        <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-bold text-slate-600">{drenaOptions.length} DRENA</span>
+      </div>
+      <div className="grid grid-cols-2 gap-3 p-4 lg:grid-cols-4">
+        <StatCard label="COGES retenus" value={globalRecap.selected}/>
+        <StatCard label="Grilles démarrées" value={`${globalRecap.started} (${globalRecap.fillRate} %)`}/>
+        <StatCard label="Grilles soumises" value={globalRecap.submitted}/>
+        <StatCard label="Grilles validées" value={`${globalRecap.validated} (${globalRecap.validationRate} %)`}/>
+      </div>
+      <div className="overflow-x-auto border-t border-slate-200">
+        <table className="min-w-[1100px] w-full text-xs">
+          <thead className="bg-slate-100 text-[9px] uppercase text-slate-600"><tr>
+            <th className="sticky left-0 z-10 bg-slate-100 px-3 py-3 text-left">DRENA / Ensemble</th>
+            <th className="px-3 py-3 text-center">Éligibles N1</th><th className="px-3 py-3 text-center">Retenus N2</th><th className="px-3 py-3 text-center">Non démarrés</th><th className="px-3 py-3 text-center">Brouillons</th><th className="px-3 py-3 text-center">Soumis</th><th className="px-3 py-3 text-center">Validés</th><th className="px-3 py-3 text-center">Remplissage</th><th className="px-3 py-3 text-center">Validation</th><th className="px-3 py-3 text-left">Dernière mise à jour</th><th className="px-2 py-3" aria-label="Ouvrir"/>
+          </tr></thead>
+          <tbody className="divide-y divide-slate-100">
+            {[globalRecap, ...recapByDrena].map((row, index) => {
+              const isGlobal = index === 0;
+              return <tr key={row.drena} className={isGlobal ? 'bg-slate-900 font-bold text-white' : 'cursor-pointer hover:bg-amber-50'} onClick={() => !isGlobal && setSelectedDrena(row.drena)}>
+                <td className={`sticky left-0 z-10 px-3 py-3 font-extrabold ${isGlobal ? 'bg-slate-900' : 'bg-white'}`}>{row.drena}</td>
+                <td className="px-3 py-3 text-center">{row.eligible}</td><td className="px-3 py-3 text-center font-bold">{row.selected}</td><td className="px-3 py-3 text-center">{row.notStarted}</td><td className="px-3 py-3 text-center">{row.draft}</td><td className="px-3 py-3 text-center">{row.submitted}</td><td className="px-3 py-3 text-center font-extrabold">{row.validated}</td>
+                <td className="px-3 py-3 text-center"><ProgressBadge value={row.fillRate} dark={isGlobal}/></td><td className="px-3 py-3 text-center"><ProgressBadge value={row.validationRate} dark={isGlobal}/></td>
+                <td className={`px-3 py-3 text-[10px] ${isGlobal ? 'text-slate-300' : 'text-slate-500'}`}>{formatUpdateDate(row.latestUpdate)}</td><td className="px-2 py-3">{!isGlobal && <ChevronRight className="h-4 w-4 text-slate-400"/>}</td>
+              </tr>;
+            })}
+          </tbody>
+        </table>
+      </div>
+      {!loading && recapByDrena.length === 0 && <div className="p-8 text-center text-xs text-slate-500">Aucune donnée disponible pour cette campagne.</div>}
+    </section>
+
     {!selectedDrena ? <div className="rounded-xl border border-slate-200 bg-white p-12 text-center text-sm text-slate-500">Sélectionnez une DRENA pour afficher son bilan.</div> :
     <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
       <div className="bg-slate-900 px-4 py-3 text-white"><h3 className="text-sm font-extrabold">{selectedDrena}</h3><p className="mt-0.5 text-[10px] text-slate-300">Classement par score niveau 2, puis par effectif total en cas d’égalité.</p></div>
@@ -80,4 +160,15 @@ export default function Niveau2Statistics({ currentUser }: { currentUser: User }
 
 function StatCard({ label, value }: { label: string; value: string | number }) {
   return <div className="rounded-lg border border-slate-200 bg-slate-50 p-3"><p className="text-[10px] font-bold uppercase text-slate-500">{label}</p><p className="mt-1 text-xl font-extrabold text-slate-900">{value}</p></div>;
+}
+
+function ProgressBadge({ value, dark = false }: { value: number; dark?: boolean }) {
+  const tone = value >= 80 ? 'bg-emerald-100 text-emerald-800' : value >= 50 ? 'bg-amber-100 text-amber-800' : 'bg-red-100 text-red-800';
+  return <span className={`inline-flex min-w-14 justify-center rounded-full px-2 py-1 text-[10px] font-extrabold ${dark ? 'bg-white/15 text-white' : tone}`}>{value} %</span>;
+}
+
+function formatUpdateDate(value?: string) {
+  if (!value) return '—';
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? '—' : date.toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' });
 }
