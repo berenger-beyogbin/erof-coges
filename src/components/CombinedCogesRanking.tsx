@@ -20,6 +20,7 @@ export default function CombinedCogesRanking({ currentUser }: { currentUser: Use
   const [campagneId, setCampagneId] = useState('');
   const [rows, setRows] = useState<SelectionErof[]>([]);
   const [sessions, setSessions] = useState<FinalSelectionSession[]>([]);
+  const [selectedDrena, setSelectedDrena] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -66,6 +67,11 @@ export default function CombinedCogesRanking({ currentUser }: { currentUser: Use
 
   const sessionByDrena = useMemo(() => new Map(sessions.map(session => [session.drena_nom, session])), [sessions]);
   const rowByEvaluation = useMemo(() => new Map(rows.map(row => [row.evaluation_id, row])), [rows]);
+  const displayedRanking = rankings.find(item => item.drena === selectedDrena) || rankings[0];
+
+  useEffect(() => {
+    if (rankings.length && !rankings.some(item => item.drena === selectedDrena)) setSelectedDrena(rankings[0].drena);
+  }, [rankings, selectedDrena]);
 
   return <div className="space-y-5">
     <header className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -86,12 +92,17 @@ export default function CombinedCogesRanking({ currentUser }: { currentUser: Use
       <div className="mt-4 flex items-center gap-2 rounded-lg border border-violet-200 bg-violet-50 px-4 py-3 text-xs text-violet-950">
         <Calculator className="h-4 w-4 shrink-0"/><strong>Score / 100 = 40 × (évaluation 1 ÷ 5) + 60 × (évaluation 2 ÷ 16).</strong>
       </div>
+      {rankings.length > 0 && <label className="mt-4 block max-w-md text-xs font-bold text-slate-700">DRENA à afficher
+        <select value={displayedRanking?.drena || ''} onChange={e => setSelectedDrena(e.target.value)} className="mt-1 block w-full rounded-lg border border-violet-200 bg-white px-3 py-2.5 text-sm font-semibold text-slate-800 shadow-sm">
+          {rankings.map(item => <option key={item.drena} value={item.drena}>{item.drena} — {item.candidates.length} COGES</option>)}
+        </select>
+      </label>}
     </header>
 
     {error && <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-xs font-semibold text-red-700">{error}</div>}
     {!loading && rankings.length === 0 && <div className="rounded-xl border bg-white p-12 text-center text-sm text-slate-500">Aucun COGES ne possède une évaluation 2 validée pour cette campagne.</div>}
 
-    {rankings.map(({ drena, candidates }) => {
+    {displayedRanking && [displayedRanking].map(({ drena, candidates }) => {
       const session = sessionByDrena.get(drena);
       const manualRows = (session?.evaluation_ids || []).map(id => rowByEvaluation.get(id)).filter(Boolean) as SelectionErof[];
       return <section key={drena} className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
