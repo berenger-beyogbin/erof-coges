@@ -22,7 +22,8 @@ import {
   AuditLog,
   EvaluationStatus,
   SelectionErof,
-  EvaluationNiveau2
+  EvaluationNiveau2,
+  FinalSelectionSession
 } from '../types';
 import { computeNiveau2Scores } from '../niveau2Scoring';
 import { supabase, isSupabaseConfigured } from '../supabaseClient';
@@ -1175,6 +1176,29 @@ export class LocalDemoService {
     setStoredItem('evaluations_niveau_2', [...rows.filter(n => n.selection_erof_id !== selectionId), row]);
     return { success: true };
   }
+
+  static async getFinalSelections(campagneId?: string): Promise<FinalSelectionSession[]> {
+    return getStoredItem<FinalSelectionSession[]>('selection_finale_sessions', [])
+      .filter(row => !campagneId || row.campagne_id === campagneId);
+  }
+
+  static async saveFinalSelection(campagneId: string, drenaNom: string, evaluationIds: string[], commentaire: string, validate: boolean, user: User): Promise<{ success: boolean; error?: string }> {
+    if (user.role !== 'admin_national') return { success: false, error: 'Action réservée à l’administrateur national.' };
+    if (!evaluationIds.length) return { success: false, error: 'Sélectionnez au moins un COGES.' };
+    const rows = getStoredItem<FinalSelectionSession[]>('selection_finale_sessions', []);
+    const existing = rows.find(row => row.campagne_id === campagneId && row.drena_nom === drenaNom);
+    if (existing?.statut === 'valide') return { success: false, error: 'Cette sélection définitive est déjà validée.' };
+    const now = new Date().toISOString();
+    const saved: FinalSelectionSession = {
+      id: existing?.id || crypto.randomUUID(), campagne_id: campagneId, drena_nom: drenaNom,
+      statut: validate ? 'valide' : 'brouillon', commentaire: commentaire.trim() || null,
+      created_by: existing?.created_by || user.id, validated_by: validate ? user.id : null,
+      validated_at: validate ? now : null, created_at: existing?.created_at || now, updated_at: now,
+      evaluation_ids: evaluationIds
+    };
+    setStoredItem('selection_finale_sessions', [...rows.filter(row => row.id !== saved.id), saved]);
+    return { success: true };
+  }
 }
 
 // REAL SUPABASE PRODUCTION STORAGE SERVICE
@@ -2219,6 +2243,30 @@ export class SupabaseDataService {
     const { error } = await supabase!.from('evaluations_niveau_2').upsert(payload, { onConflict: 'selection_erof_id' });
     return error ? { success: false, error: toUserError('l’enregistrement de la grille de niveau 2', error) } : { success: true };
   }
+
+  static async getFinalSelections(campagneId?: string): Promise<FinalSelectionSession[]> {
+    let query = supabase!.from('selection_finale_sessions')
+      .select('*, drenas(nom), selection_finale_coges(evaluation_id,rang_final)')
+      .order('created_at');
+    if (campagneId) query = query.eq('campagne_id', campagneId);
+    const { data, error } = await query;
+    if (error) throw new Error(toUserError('le chargement des sélections définitives', error));
+    return (data || []).map((row: any) => ({
+      ...row,
+      drena_nom: row.drenas?.nom || '',
+      evaluation_ids: (row.selection_finale_coges || [])
+        .sort((a: any, b: any) => Number(a.rang_final) - Number(b.rang_final))
+        .map((item: any) => item.evaluation_id)
+    }));
+  }
+
+  static async saveFinalSelection(campagneId: string, drenaNom: string, evaluationIds: string[], commentaire: string, validate: boolean, _user: User): Promise<{ success: boolean; error?: string }> {
+    const { error } = await supabase!.rpc('save_selection_finale', {
+      p_campagne_id: campagneId, p_drena_nom: drenaNom, p_evaluation_ids: evaluationIds,
+      p_commentaire: commentaire || null, p_validate: validate
+    });
+    return error ? { success: false, error: toUserError('l’enregistrement de la sélection définitive', error) } : { success: true };
+  }
 }
 
 // UNIFIED EXPORT SERVICE (DATA ROUTER)
@@ -2511,5 +2559,17 @@ export class DataService {
     return isSupabaseConfigured
       ? SupabaseDataService.saveNiveau2(selectionId, input, user)
       : LocalDemoService.saveNiveau2(selectionId, input, user);
+  }
+
+  static async getFinalSelections(campagneId?: string): Promise<FinalSelectionSession[]> {
+    return isSupabaseConfigured
+      ? SupabaseDataService.getFinalSelections(campagneId)
+      : LocalDemoService.getFinalSelections(campagneId);
+  }
+
+  static async saveFinalSelection(campagneId: string, drenaNom: string, evaluationIds: string[], commentaire: string, validate: boolean, user: User): Promise<{ success: boolean; error?: string }> {
+    return isSupabaseConfigured
+      ? SupabaseDataService.saveFinalSelection(campagneId, drenaNom, evaluationIds, commentaire, validate, user)
+      : LocalDemoService.saveFinalSelection(campagneId, drenaNom, evaluationIds, commentaire, validate, user);
   }
 }

@@ -12,6 +12,7 @@ import UserManager from './components/UserManager';
 import AdminStatistics from './components/AdminStatistics';
 import Niveau2Selection from './components/Niveau2Selection';
 import Niveau2Statistics from './components/Niveau2Statistics';
+import FinalCogesSelection from './components/FinalCogesSelection';
 import { DataService, SupabaseDataService } from './data/dataService';
 import { User, AuditLog } from './types';
 import { supabase, isSupabaseConfigured } from './supabaseClient';
@@ -28,15 +29,16 @@ import {
   UserCheck,
   Server,
   CalendarRange,
-  BarChart3
-  ,Award
+  BarChart3,
+  Award,
+  ClipboardCheck
 } from 'lucide-react';
 
 export default function App() {
   const publicWorkshopToken = new URLSearchParams(window.location.search).get('niveau2_public');
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [authInitialized, setAuthInitialized] = useState(false);
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'niveau2' | 'niveau2_bilan' | 'bilan' | 'campagnes' | 'utilisateurs' | 'logs' | 'about'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'niveau2' | 'niveau2_bilan' | 'selection_finale' | 'bilan' | 'campagnes' | 'utilisateurs' | 'logs' | 'about'>('dashboard');
   const [activeView, setActiveView] = useState<'list' | 'form'>('list');
   const [editingEvalId, setEditingEvalId] = useState<string | null>(null);
   
@@ -327,6 +329,18 @@ export default function App() {
 
             {currentUser.role === 'admin_national' && (
               <button
+                onClick={() => { setActiveTab('selection_finale'); setActiveView('list'); }}
+                className={`flex items-center space-x-2 px-3.5 py-2 rounded-lg text-xs font-bold transition-all border ${
+                  activeTab === 'selection_finale' ? 'bg-emerald-600 text-white border-emerald-500' : 'text-slate-400 border-transparent hover:bg-slate-800/40 hover:text-white'
+                }`}
+              >
+                <ClipboardCheck className="h-4 w-4" />
+                <span>Sélection définitive</span>
+              </button>
+            )}
+
+            {currentUser.role === 'admin_national' && (
+              <button
                 onClick={() => setActiveTab('campagnes')}
                 className={`flex items-center space-x-2 px-3.5 py-2 rounded-lg text-xs font-bold transition-all border ${
                   activeTab === 'campagnes'
@@ -420,6 +434,10 @@ export default function App() {
 
         {activeTab === 'niveau2_bilan' && currentUser.role !== 'lecteur' && (
           <Niveau2Statistics currentUser={currentUser} />
+        )}
+
+        {activeTab === 'selection_finale' && currentUser.role === 'admin_national' && (
+          <FinalCogesSelection currentUser={currentUser} />
         )}
 
         {/* Campaign management tab panel */}

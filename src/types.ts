@@ -200,6 +200,23 @@ export interface EvaluationNiveau2 {
   updated_at?: string;
 }
 
+export type FinalSelectionStatus = 'brouillon' | 'valide';
+
+export interface FinalSelectionSession {
+  id: string;
+  campagne_id: string;
+  drena_id?: string;
+  drena_nom: string;
+  statut: FinalSelectionStatus;
+  commentaire?: string | null;
+  created_by?: string | null;
+  validated_by?: string | null;
+  validated_at?: string | null;
+  created_at?: string;
+  updated_at?: string;
+  evaluation_ids: string[];
+}
+
 export interface PreuveDocumentaire {
   id: string;
   evaluation_id: string;
