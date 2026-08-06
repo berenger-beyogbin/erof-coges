@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { CheckCircle2, ClipboardCheck, Copy, Download, Link2, LockKeyhole, RefreshCw, Save } from 'lucide-react';
+import { CheckCircle2, ClipboardCheck, Copy, Download, Link2, LockKeyhole, Pencil, RefreshCw, Save, X } from 'lucide-react';
 import { DataService, formatUserFacingError } from '../data/dataService';
 import { Campagne, Evaluation, FinalSelectionSession, SelectionErof, User } from '../types';
 import { supabase } from '../supabaseClient';
@@ -23,6 +23,7 @@ export default function FinalCogesSelection({ currentUser, publicToken }: { curr
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [editingValidated, setEditingValidated] = useState(false);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
   const [generatedLink, setGeneratedLink] = useState('');
@@ -68,7 +69,7 @@ export default function FinalCogesSelection({ currentUser, publicToken }: { curr
     .filter(row => row.niveau2?.statut === 'valide')
     .map(row => row.evaluation?.drena_nom).filter(Boolean) as string[])].sort((a, b) => a.localeCompare(b, 'fr')), [niveau2Rows]);
   const currentSession = sessions.find(row => row.drena_nom === selectedDrena);
-  const isLocked = currentSession?.statut === 'valide';
+  const isLocked = currentSession?.statut === 'valide' && !editingValidated;
 
   const level1Ranks = useMemo(() => {
     const ranked = evaluations.filter(row => row.drena_nom === selectedDrena)
@@ -87,6 +88,7 @@ export default function FinalCogesSelection({ currentUser, publicToken }: { curr
 
   const chooseDrena = (name: string) => {
     setSelectedDrena(name); setError(''); setMessage('');
+    setEditingValidated(false);
     const session = sessions.find(row => row.drena_nom === name);
     setSelectedIds(session?.evaluation_ids || []);
     setCommentaire(session?.commentaire || '');
@@ -110,6 +112,7 @@ export default function FinalCogesSelection({ currentUser, publicToken }: { curr
     if (!result.success) setError(result.error || 'Enregistrement impossible.');
     else {
       setMessage(validate ? 'Sélection définitive validée et verrouillée.' : 'Brouillon enregistré.');
+      setEditingValidated(false);
       await load(campagneId, true);
     }
     setBusy(false);
@@ -196,7 +199,12 @@ export default function FinalCogesSelection({ currentUser, publicToken }: { curr
     <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
       <div className="flex flex-wrap items-center justify-between gap-3 bg-slate-900 px-4 py-3 text-white">
         <div><h3 className="text-sm font-extrabold">{selectedDrena}</h3><p className="text-[10px] text-slate-300">{candidates.length} COGES disposent des deux évaluations validées · {selectedIds.length} retenu(s) et classé(s)</p></div>
-        <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[10px] font-bold ${isLocked ? 'bg-emerald-500 text-white' : 'bg-amber-400 text-slate-950'}`}>{isLocked ? <LockKeyhole className="h-3.5 w-3.5"/> : null}{isLocked ? 'Sélection validée' : 'Brouillon modifiable'}</span>
+        <div className="flex flex-wrap items-center gap-2">
+          <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[10px] font-bold ${isLocked ? 'bg-emerald-500 text-white' : 'bg-amber-400 text-slate-950'}`}>{isLocked ? <LockKeyhole className="h-3.5 w-3.5"/> : null}{isLocked ? 'Sélection validée' : editingValidated ? 'Modification en cours' : 'Brouillon modifiable'}</span>
+          {currentSession?.statut === 'valide' && !publicToken && (editingValidated
+            ? <button type="button" onClick={() => chooseDrena(selectedDrena)} className="inline-flex items-center gap-1.5 rounded-lg border border-slate-500 px-3 py-1.5 text-[10px] font-bold hover:bg-slate-800"><X className="h-3.5 w-3.5"/> Annuler</button>
+            : <button type="button" onClick={() => setEditingValidated(true)} className="inline-flex items-center gap-1.5 rounded-lg bg-violet-500 px-3 py-1.5 text-[10px] font-bold text-white hover:bg-violet-400"><Pencil className="h-3.5 w-3.5"/> Modifier la sélection</button>)}
+        </div>
       </div>
       {!isLocked && candidates.length > 0 && <div className="border-b border-blue-200 bg-blue-50 px-4 py-3 text-xs font-semibold text-blue-900"><strong>Comment classer :</strong> cochez les COGES dans l’ordre souhaité. Le premier coché devient rang 1, le deuxième rang 2, et ainsi de suite. Une ligne décochée perd son rang et les suivants sont automatiquement remontés.</div>}
       {candidates.length === 0 ? <div className="p-10 text-center text-xs text-slate-500">Aucun COGES avec une évaluation 2 validée dans cette DRENA.</div> :

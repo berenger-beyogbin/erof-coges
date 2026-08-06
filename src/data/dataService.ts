@@ -1187,7 +1187,6 @@ export class LocalDemoService {
     if (!evaluationIds.length) return { success: false, error: 'Sélectionnez au moins un COGES.' };
     const rows = getStoredItem<FinalSelectionSession[]>('selection_finale_sessions', []);
     const existing = rows.find(row => row.campagne_id === campagneId && row.drena_nom === drenaNom);
-    if (existing?.statut === 'valide') return { success: false, error: 'Cette sélection définitive est déjà validée.' };
     const now = new Date().toISOString();
     const saved: FinalSelectionSession = {
       id: existing?.id || crypto.randomUUID(), campagne_id: campagneId, drena_nom: drenaNom,
