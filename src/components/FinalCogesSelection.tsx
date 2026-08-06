@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { CheckCircle2, ClipboardCheck, Copy, Link2, LockKeyhole, RefreshCw, Save } from 'lucide-react';
+import { CheckCircle2, ClipboardCheck, Copy, Download, Link2, LockKeyhole, RefreshCw, Save } from 'lucide-react';
 import { DataService, formatUserFacingError } from '../data/dataService';
 import { Campagne, Evaluation, FinalSelectionSession, SelectionErof, User } from '../types';
 import { supabase } from '../supabaseClient';
@@ -22,6 +22,7 @@ export default function FinalCogesSelection({ currentUser, publicToken }: { curr
   const [commentaire, setCommentaire] = useState('');
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
   const [generatedLink, setGeneratedLink] = useState('');
@@ -128,6 +129,52 @@ export default function FinalCogesSelection({ currentUser, publicToken }: { curr
     finally { setBusy(false); }
   };
 
+  const exportManualSelections = async () => {
+    const niveau2ByEvaluation = new Map<string, SelectionErof>(niveau2Rows.map(row => [row.evaluation_id, row]));
+    const evaluationById = new Map<string, RankedEvaluation>(evaluations.map(row => [row.id, row]));
+    const exportRows = sessions
+      .slice()
+      .sort((a, b) => a.drena_nom.localeCompare(b.drena_nom, 'fr'))
+      .flatMap(session => (session.evaluation_ids || []).map((evaluationId, index) => {
+        const niveau2 = niveau2ByEvaluation.get(evaluationId);
+        const evaluation = evaluationById.get(evaluationId);
+        return {
+          DRENA: session.drena_nom,
+          'Rang final manuel': index + 1,
+          'COGES retenu': evaluation?.etablissement_nom || niveau2?.evaluation?.etablissement_nom || evaluationId,
+          IEPP: evaluation?.iepp_nom || niveau2?.evaluation?.iepp_nom || 'Non renseignée',
+          'Score évaluation 1 / 5': Number(evaluation?.score_global ?? niveau2?.score_erof ?? 0),
+          'Score évaluation 2 / 16': Number(niveau2?.niveau2?.score_total ?? 0),
+          'Niveau de priorité': niveau2?.niveau2?.niveau_priorite || '',
+          'Statut de la sélection': session.statut === 'valide' ? 'Validée' : 'Brouillon',
+          'Commentaire / justification': session.commentaire || ''
+        };
+      }));
+
+    if (!exportRows.length) {
+      setError('Aucune sélection manuelle définitive n’est enregistrée pour cette campagne.');
+      return;
+    }
+
+    setExporting(true); setError(''); setMessage('');
+    try {
+      const XLSX = await import('@e965/xlsx');
+      const workbook = XLSX.utils.book_new();
+      const worksheet = XLSX.utils.json_to_sheet(exportRows);
+      worksheet['!autofilter'] = { ref: worksheet['!ref'] || 'A1:I1' };
+      worksheet['!cols'] = [
+        { wch: 24 }, { wch: 18 }, { wch: 38 }, { wch: 26 }, { wch: 23 },
+        { wch: 24 }, { wch: 25 }, { wch: 24 }, { wch: 45 }
+      ];
+      XLSX.utils.book_append_sheet(workbook, worksheet, 'Sélections définitives');
+      const campaign = campagnes.find(item => item.id === campagneId);
+      const safeCampaign = (campaign?.nom || 'campagne').replace(/[^a-zA-Z0-9À-ÿ_-]+/g, '-').replace(/^-+|-+$/g, '');
+      XLSX.writeFile(workbook, `selections-manuelles-definitives-toutes-drena-${safeCampaign}-${new Date().toISOString().slice(0, 10)}.xlsx`, { compression: true });
+    } catch (e) {
+      setError(formatUserFacingError('l’export Excel des sélections manuelles définitives', e));
+    } finally { setExporting(false); }
+  };
+
   return <div className="space-y-5">
     <header className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
       <h2 className="flex items-center gap-2 text-lg font-extrabold text-slate-900"><ClipboardCheck className="h-5 w-5 text-emerald-600"/> Sélection définitive des COGES</h2>
@@ -139,7 +186,7 @@ export default function FinalCogesSelection({ currentUser, publicToken }: { curr
       </div>
     </header>
 
-    {!publicToken && currentUser.role === 'admin_national' && <div className="flex flex-wrap items-center justify-end gap-2"><button type="button" onClick={() => void generatePublicLink()} disabled={busy || !campagneId} className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2.5 text-xs font-bold text-white disabled:opacity-40"><Link2 className="h-4 w-4"/> Générer un lien public</button></div>}
+    {!publicToken && currentUser.role === 'admin_national' && <div className="flex flex-wrap items-center justify-end gap-2"><button type="button" onClick={() => void exportManualSelections()} disabled={loading || exporting || sessions.every(session => !session.evaluation_ids?.length)} className="inline-flex items-center gap-2 rounded-lg bg-violet-600 px-4 py-2.5 text-xs font-bold text-white disabled:opacity-40"><Download className="h-4 w-4"/> {exporting ? 'Export en cours…' : 'Exporter les sélections de toutes les DRENA'}</button><button type="button" onClick={() => void generatePublicLink()} disabled={busy || !campagneId} className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2.5 text-xs font-bold text-white disabled:opacity-40"><Link2 className="h-4 w-4"/> Générer un lien public</button></div>}
     {generatedLink && <div className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 p-3"><input readOnly value={generatedLink} className="flex-1 rounded-lg border bg-white px-3 py-2 text-xs"/><button type="button" onClick={() => void navigator.clipboard.writeText(generatedLink)} className="rounded-lg bg-emerald-600 p-2 text-white" title="Copier"><Copy className="h-4 w-4"/></button></div>}
 
     {error && <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-xs font-semibold text-red-700">{error}</div>}
